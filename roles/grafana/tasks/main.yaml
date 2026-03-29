@@ -1,0 +1,72 @@
+---
+- name: Add Grafana apt key
+  apt_key:
+    url: https://apt.grafana.com/gpg.key
+    state: present
+
+- name: Add Grafana apt repo
+  apt_repository:
+    repo: "deb https://apt.grafana.com stable main"
+    filename: grafana
+    state: present
+
+- name: Update APT cache
+  apt:
+    update_cache: yes
+    cache_valid_time: 7200
+
+- name: Create Grafana config and provisioning directories
+  file:
+    path: "/opt/grafana/{{ item }}"
+    state: directory
+    mode: "0755"
+  loop:
+    - ""
+    - provisioning
+    - provisioning/dashboards
+    - provisioning/datasources
+
+- name: Deploy grafana.ini
+  template:
+    src: grafana.ini.j2
+    dest: /opt/grafana/grafana.ini
+    owner: root
+    group: root
+    mode: "0644"
+    force: yes
+  notify: restart grafana container
+  no_log: false
+
+- name: Deploy datasource configuration
+  template:
+    src: datasource.yaml.j2
+    dest: /opt/grafana/provisioning/datasources/default.yaml
+    mode: "0644"
+  notify: restart grafana container
+
+- name: Deploy dashboard provisioning config
+  template:
+    src: dashboard.yaml.j2
+    dest: /opt/grafana/provisioning/dashboards/default.yaml
+    mode: "0644"
+  notify: restart grafana container
+
+- name: Deploy dashboards
+  copy:
+    src: "{{ item }}"
+    dest: "/opt/grafana/provisioning/dashboards/{{ item }}"
+    mode: "0644"
+  loop:
+    - gameservers.json
+    - nodes.json
+  notify: restart grafana container
+
+- name: Run Grafana container
+  community.docker.docker_container:
+    name: grafana
+    image: grafana/grafana
+    state: started
+    restart_policy: unless-stopped
+    network_mode: host
+    volumes:
+      - /opt/grafana:/etc/grafana

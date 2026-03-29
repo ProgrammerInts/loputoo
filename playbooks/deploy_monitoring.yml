@@ -1,0 +1,36 @@
+---
+# Deploys the full monitoring stack (Prometheus, Loki, Grafana) on the monitoring VM.
+# Run once when setting up the monitoring VM, and again whenever config changes.
+#
+# Usage:
+#   ansible-playbook playbooks/deploy_monitoring.yml
+
+- name: Set up monitoring VM
+  hosts: monitoring
+  become: true
+  roles:
+    - ufw
+    - docker
+    - node_exporter
+    - loki
+    - prometheus
+    - blackbox_exporter
+    - grafana
+  post_tasks:
+    - name: Allow Grafana port
+      ufw:
+        rule: allow
+        port: "{{ grafana_port }}"
+        proto: tcp
+
+    - name: Allow Prometheus port
+      ufw:
+        rule: allow
+        port: "{{ prometheus_port }}"
+        proto: tcp
+
+    - name: Allow Loki port
+      ufw:
+        rule: allow
+        port: "{{ loki_port }}"
+        proto: tcp

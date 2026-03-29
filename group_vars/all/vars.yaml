@@ -1,0 +1,14 @@
+---
+# Grafana
+grafana_port: 3000
+grafana_username: admin
+grafana_password: "{{ vault_grafana_password }}"
+
+# Loki
+loki_port: 3100
+
+# Prometheus
+prometheus_port: 9090
+
+# Computed: IP of the monitoring VM (used by promtail and Grafana datasources)
+monitoring_host_ip: "{{ hostvars[groups['monitoring'][0]]['ansible_host'] }}"

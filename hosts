@@ -1,0 +1,11 @@
+# GSDeploy inventory — managed by the GSDeploy application
+# VM connection details (IPs, SSH user, key) live in host_vars/<hostname>.yaml
+
+[monitoring]
+monitoring-vm
+
+[game_servers]
+gamevm
+
+[all:vars]
+ansible_python_interpreter=/usr/bin/python3

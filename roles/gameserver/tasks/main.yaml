@@ -1,0 +1,55 @@
+---
+- name: Create game server directories
+  file:
+    path: "/opt/gameservers/{{ server_name }}/{{ item }}"
+    state: directory
+    mode: "0755"
+  loop:
+    - ""
+    - mods
+    - plugins
+    - world
+  when: game_type == 'minecraft'
+
+- name: Create game server directory
+  file:
+    path: "/opt/gameservers/{{ server_name }}"
+    state: directory
+    mode: "0755"
+  when: game_type != 'minecraft'
+
+- name: Template Docker Compose file
+  template:
+    src: "{{ game_type }}/docker-compose.yml.j2"
+    dest: "/opt/gameservers/{{ server_name }}/docker-compose.yml"
+    mode: "0644"
+
+- name: Open game server TCP port in firewall
+  ufw:
+    rule: allow
+    port: "{{ server_port }}"
+    proto: tcp
+  when: game_type == 'minecraft'
+
+- name: Allow mc-monitor metrics port from monitoring VM only
+  ufw:
+    rule: allow
+    port: "{{ server_port | int + 1000 }}"
+    proto: tcp
+    src: "{{ monitoring_host_ip }}"
+  when: game_type == 'minecraft'
+
+- name: Open game server UDP ports in firewall
+  ufw:
+    rule: allow
+    port: "{{ item }}"
+    proto: udp
+  loop:
+    - "{{ server_port | int }}"
+    - "{{ server_port | int + 1 }}"
+  when: game_type == 'valheim'
+
+- name: Start game server
+  community.docker.docker_compose_v2:
+    project_src: "/opt/gameservers/{{ server_name }}"
+    state: present

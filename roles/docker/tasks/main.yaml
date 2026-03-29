@@ -1,0 +1,32 @@
+---
+- name: Install Docker engine and Python bindings
+  apt:
+    name:
+      - docker.io
+      - docker-compose-v2
+      - python3-docker
+    state: present
+    update_cache: yes
+
+- name: Ensure Docker service is started and enabled
+  service:
+    name: docker
+    state: started
+    enabled: yes
+
+- name: Ensure Docker socket is available
+  wait_for:
+    path: /var/run/docker.sock
+    timeout: 30
+
+- name: Add admin user to docker group
+  user:
+    name: "{{ admin_username }}"
+    groups: docker
+    append: yes
+  when: admin_username is defined
+
+- name: Install Loki Docker logging plugin
+  community.docker.docker_plugin:
+    plugin_name: grafana/loki-docker-driver:latest
+    state: enable

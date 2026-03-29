@@ -1,0 +1,46 @@
+services:
+  {{ server_name }}:
+    image: itzg/minecraft-server:latest
+    container_name: "{{ server_name }}"
+    restart: unless-stopped
+    environment:
+      EULA: "TRUE"
+      VERSION: "{{ minecraft_version | default('LATEST') }}"
+      MEMORY: "{{ minecraft_memory | default('2G') }}"
+      DIFFICULTY: "{{ minecraft_difficulty | default('normal') }}"
+      MAX_PLAYERS: "{{ minecraft_max_players | default(20) }}"
+      MOTD: "{{ minecraft_motd | default(server_name) }}"
+      LEVEL_SEED: "{{ minecraft_seed | default('') }}"
+      MODE: "{{ minecraft_mode | default('survival') }}"
+      ENABLE_RCON: "true"
+      RCON_PASSWORD: "{{ minecraft_rcon_password | default('rconpassword') }}"
+      RCON_PORT: "25575"
+    ports:
+      - "{{ server_port | default(25565) }}:25565"
+    volumes:
+      - ./data:/data
+      - ./mods:/data/mods
+      - ./plugins:/data/plugins
+      - ./world:/data/world
+    labels:
+      game_type: minecraft
+      server_name: "{{ server_name }}"
+    logging:
+      driver: grafana/loki-docker-driver
+      options:
+        loki-url: "http://{{ monitoring_host_ip }}:{{ loki_port }}/loki/api/v1/push"
+        loki-external-labels: "job=gameserver,game_type=minecraft,server_name={{ server_name }}"
+
+  {{ server_name }}_monitor:
+    image: itzg/mc-monitor:latest
+    container_name: "{{ server_name }}_monitor"
+    restart: unless-stopped
+    environment:
+      EXPORT_FOR_BEDROCK: "false"
+      EXPORT_SERVERS: "{{ server_name }}:25565"
+      ENABLE_RCON: "true"
+      RCON_PASSWORD: "{{ minecraft_rcon_password | default('rconpassword') }}"
+    ports:
+      - "{{ server_port | default(25565) | int + 1000 }}:8080"
+    depends_on:
+      - "{{ server_name }}"

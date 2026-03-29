@@ -1,0 +1,33 @@
+server:
+  http_listen_port: 9080
+  grpc_listen_port: 0
+
+positions:
+  filename: /var/lib/promtail/positions.yaml
+
+clients:
+  - url: "http://{{ monitoring_host_ip }}:{{ loki_port }}/loki/api/v1/push"
+
+scrape_configs:
+  - job_name: syslog
+    static_configs:
+      - targets: [localhost]
+        labels:
+          job: syslog
+          hostname: "{{ inventory_hostname }}"
+          __path__: /var/log/syslog
+
+  - job_name: gameserver
+    docker_sd_configs:
+      - host: unix:///var/run/docker.sock
+    relabel_configs:
+      - source_labels: [__meta_docker_container_name]
+        target_label: container
+      - source_labels: [__meta_docker_container_label_game_type]
+        target_label: game_type
+      - source_labels: [__meta_docker_container_label_server_name]
+        target_label: server_name
+      - target_label: job
+        replacement: gameserver
+      - target_label: hostname
+        replacement: "{{ inventory_hostname }}"

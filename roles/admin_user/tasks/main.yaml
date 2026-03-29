@@ -1,0 +1,47 @@
+---
+# Creates the permanent admin user with sudo (password required) and docker group access.
+# Runs as the bootstrap user (gsdeploy_install).
+
+- name: Generate admin password
+  set_fact:
+    admin_password_plain: "{{ lookup('password', '/dev/null length=16 chars=ascii_letters,digits') }}"
+  no_log: true
+
+- name: Create admin user
+  user:
+    name: "{{ admin_username }}"
+    shell: /bin/bash
+    create_home: yes
+    groups:
+      - sudo
+    append: yes
+    password: "{{ admin_password_plain | password_hash('sha512') }}"
+    state: present
+
+- name: Grant admin user sudo with password
+  copy:
+    dest: "/etc/sudoers.d/{{ admin_username }}"
+    content: "{{ admin_username }} ALL=(ALL) ALL\n"
+    mode: "0440"
+    validate: "visudo -cf %s"
+
+- name: Add SSH public key for admin user
+  authorized_key:
+    user: "{{ admin_username }}"
+    key: "{{ lookup('file', ansible_ssh_private_key_file ~ '.pub') }}"
+    state: present
+
+- name: Ensure .ssh directory permissions are correct
+  file:
+    path: "/home/{{ admin_username }}/.ssh"
+    state: directory
+    owner: "{{ admin_username }}"
+    group: "{{ admin_username }}"
+    mode: "0700"
+
+- name: Store admin credentials for display
+  set_fact:
+    admin_credentials:
+      username: "{{ admin_username }}"
+      password: "{{ admin_password_plain }}"
+  no_log: true

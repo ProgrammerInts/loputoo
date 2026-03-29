@@ -1,0 +1,39 @@
+---
+- name: Create blackbox_exporter config directory
+  file:
+    path: /opt/blackbox_exporter
+    state: directory
+    mode: "0755"
+
+- name: Deploy blackbox_exporter config
+  copy:
+    dest: /opt/blackbox_exporter/config.yml
+    content: |
+      modules:
+        tcp_connect:
+          prober: tcp
+          timeout: 5s
+        udp_connect:
+          prober: udp
+          timeout: 5s
+    mode: "0644"
+  notify: restart blackbox_exporter
+
+- name: Run blackbox_exporter container
+  community.docker.docker_container:
+    name: blackbox_exporter
+    image: prom/blackbox-exporter:latest
+    state: started
+    restart_policy: unless-stopped
+    published_ports:
+      - "9115:9115"
+    volumes:
+      - /opt/blackbox_exporter:/etc/blackbox_exporter
+    command: --config.file=/etc/blackbox_exporter/config.yml
+
+- name: Allow blackbox_exporter port from localhost only
+  ufw:
+    rule: allow
+    port: "9115"
+    proto: tcp
+    src: "127.0.0.1"

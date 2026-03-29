@@ -1,0 +1,19 @@
+---
+- name: Install node_exporter
+  apt:
+    name: prometheus-node-exporter
+    state: present
+    update_cache: yes
+
+- name: Ensure node_exporter is running
+  service:
+    name: prometheus-node-exporter
+    state: started
+    enabled: true
+
+- name: Allow node_exporter port from monitoring VM only
+  ufw:
+    rule: allow
+    port: "9100"
+    proto: tcp
+    src: "{{ monitoring_host_ip }}"

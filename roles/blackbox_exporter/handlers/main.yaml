@@ -1,0 +1,6 @@
+---
+- name: restart blackbox_exporter
+  community.docker.docker_container:
+    name: blackbox_exporter
+    state: started
+    restart: true

@@ -1,0 +1,15 @@
+---
+# Run this on every game server VM before deploying game servers.
+# Sets up Docker, node_exporter, cAdvisor, and Promtail.
+#
+# Usage:
+#   ansible-playbook playbooks/setup_vm.yml --limit <hostname>
+
+- name: Set up game server VM
+  hosts: game_servers
+  become: true
+  roles:
+    - docker
+    - node_exporter
+    - cadvisor
+    - promtail

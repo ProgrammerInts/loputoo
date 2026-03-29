@@ -1,0 +1,15 @@
+---
+# Removes the temporary bootstrap user and its sudoers entry.
+# Runs as the bootstrap user itself via sudo — user is removed after tasks complete.
+
+- name: Remove bootstrap user and home directory
+  user:
+    name: gsdeploy_install
+    state: absent
+    remove: yes
+    force: yes
+
+- name: Remove bootstrap sudoers entry
+  file:
+    path: /etc/sudoers.d/gsdeploy_install
+    state: absent

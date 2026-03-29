@@ -1,0 +1,64 @@
+---
+# Full VM provisioning playbook.
+# Connects as the operator's existing sudo user, creates a temporary bootstrap user,
+# sets up the permanent admin user and all services, then removes the bootstrap user.
+#
+# Required variables:
+#   target           - inventory hostname of the VM to provision
+#   initial_user     - existing sudo-capable user to connect with initially
+#   admin_username   - username for the permanent admin user
+#
+# Usage:
+#   ansible-playbook playbooks/provision_vm.yml \
+#     -e "target=gamevm-01 initial_user=ubuntu admin_username=gameadmin"
+
+# Play 1: Connect as the operator's user, create bootstrap user
+- name: Create bootstrap user
+  hosts: "{{ target }}"
+  become: true
+  vars:
+    ansible_user: "{{ initial_user }}"
+    ansible_become_pass: "{{ initial_become_pass }}"
+  roles:
+    - bootstrap_user
+
+# Play 2: Connect as bootstrap user (NOPASSWD sudo), create admin user and set up services
+- name: Set up admin user and VM services
+  hosts: "{{ target }}"
+  become: true
+  vars:
+    ansible_user: gsdeploy_install
+  roles:
+    - admin_user
+    - ufw
+    - docker
+    - node_exporter
+    - cadvisor
+    - promtail
+  post_tasks:
+    - name: Display admin credentials
+      debug:
+        msg:
+          - "Provisioning complete!"
+          - "Username : {{ admin_credentials.username }}"
+          - "Password : {{ admin_credentials.password }}"
+          - "SSH key  : already installed"
+
+    - name: Save admin credentials to local Documents folder
+      delegate_to: localhost
+      become: false
+      lineinfile:
+        path: "{{ lookup('env', 'HOME') }}/Documents/gsdeploy_credentials.txt"
+        line: "{{ ansible_host }} | {{ admin_credentials.username }} | {{ admin_credentials.password }}"
+        create: yes
+        mode: "0600"
+
+# Play 3: Remove bootstrap user (connect as initial_user to avoid self-deletion)
+- name: Clean up bootstrap user
+  hosts: "{{ target }}"
+  become: true
+  vars:
+    ansible_user: "{{ initial_user }}"
+    ansible_become_pass: "{{ initial_become_pass }}"
+  roles:
+    - cleanup

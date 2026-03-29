@@ -1,0 +1,24 @@
+---
+# Creates a temporary install user with passwordless sudo.
+# Runs as the initial user provided by the operator.
+# This user is removed at the end of provisioning by the cleanup role.
+
+- name: Create bootstrap user
+  user:
+    name: gsdeploy_install
+    shell: /bin/bash
+    create_home: yes
+    state: present
+
+- name: Grant bootstrap user passwordless sudo
+  copy:
+    dest: /etc/sudoers.d/gsdeploy_install
+    content: "gsdeploy_install ALL=(ALL) NOPASSWD:ALL\n"
+    mode: "0440"
+    validate: "visudo -cf %s"
+
+- name: Add SSH public key for bootstrap user
+  authorized_key:
+    user: gsdeploy_install
+    key: "{{ lookup('file', ansible_ssh_private_key_file ~ '.pub') }}"
+    state: present

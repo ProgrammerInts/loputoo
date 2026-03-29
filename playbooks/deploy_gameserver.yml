@@ -1,0 +1,21 @@
+---
+# Deploys a single game server container on the target VM.
+#
+# Required variables:
+#   target    - inventory hostname of the game server VM
+#   game_type - type of game server (minecraft, valheim)
+#   name      - unique name for this server instance
+#   port      - host port to expose the game server on
+#
+# Usage:
+#   ansible-playbook playbooks/deploy_gameserver.yml \
+#     -e "target=gamevm-01 game_type=minecraft name=survival port=25565"
+
+- name: Deploy game server
+  hosts: "{{ target }}"
+  become: true
+  vars:
+    server_name: "{{ name }}"
+    server_port: "{{ port }}"
+  roles:
+    - gameserver

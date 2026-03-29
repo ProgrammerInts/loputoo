@@ -1,0 +1,127 @@
+{
+  "title": "Game Servers",
+  "uid": "gameservers",
+  "tags": ["gsdeploy"],
+  "timezone": "browser",
+  "schemaVersion": 38,
+  "refresh": "10s",
+  "time": {"from": "now-30m", "to": "now"},
+  "panels": [
+    {
+      "type": "timeseries",
+      "title": "Container CPU Usage %",
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 0},
+      "datasource": {"type": "prometheus", "uid": "prometheus_ds"},
+      "targets": [
+        {
+          "expr": "rate(container_cpu_usage_seconds_total{image!=\"\",name!~\".*monitor.*|cadvisor\",name!=\"\"}[1m]) * 100",
+          "legendFormat": "{{name}} ({{image}})"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Container Memory Usage (MB)",
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0},
+      "datasource": {"type": "prometheus", "uid": "prometheus_ds"},
+      "targets": [
+        {
+          "expr": "container_memory_usage_bytes{image!=\"\",name!~\".*monitor.*|cadvisor\",name!=\"\"} / 1024 / 1024",
+          "legendFormat": "{{name}} ({{image}})"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Disk I/O (MB/s)",
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 8},
+      "datasource": {"type": "prometheus", "uid": "prometheus_ds"},
+      "targets": [
+        {
+          "expr": "sum by (name) (rate(container_fs_reads_bytes_total{name!~\".*monitor.*|cadvisor\",name!=\"\"}[1m])) / 1024 / 1024",
+          "legendFormat": "Read - {{name}} ({{image}})"
+        },
+        {
+          "expr": "sum by (name) (rate(container_fs_writes_bytes_total{name!~\".*monitor.*|cadvisor\",name!=\"\"}[1m])) / 1024 / 1024",
+          "legendFormat": "Write - {{name}} ({{image}})"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Network (MB/s)",
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 8},
+      "datasource": {"type": "prometheus", "uid": "prometheus_ds"},
+      "targets": [
+        {
+          "expr": "sum by (name) (rate(container_network_receive_bytes_total{name!~\".*monitor.*|cadvisor\",name!=\"\"}[1m])) / 1024 / 1024",
+          "legendFormat": "Download - {{name}} ({{image}})"
+        },
+        {
+          "expr": "sum by (name) (rate(container_network_transmit_bytes_total{name!~\".*monitor.*|cadvisor\",name!=\"\"}[1m])) / 1024 / 1024",
+          "legendFormat": "Upload - {{name}} ({{image}})"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Server Latency (ms)",
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 16},
+      "datasource": {"type": "prometheus", "uid": "prometheus_ds"},
+      "targets": [
+        {
+          "expr": "probe_duration_seconds{job=\"blackbox_tcp\"} * 1000",
+          "legendFormat": "{{instance}}"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Server Availability",
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 16},
+      "datasource": {"type": "prometheus", "uid": "prometheus_ds"},
+      "targets": [
+        {
+          "expr": "probe_success{job=\"blackbox_tcp\"}",
+          "legendFormat": "{{instance}}"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Minecraft TPS",
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 24},
+      "datasource": {"type": "prometheus", "uid": "prometheus_ds"},
+      "targets": [
+        {
+          "expr": "mc_tps",
+          "legendFormat": "{{server}}"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Minecraft Players Online",
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 24},
+      "datasource": {"type": "prometheus", "uid": "prometheus_ds"},
+      "targets": [
+        {
+          "expr": "mc_players_online_count",
+          "legendFormat": "{{server}}"
+        }
+      ]
+    },
+    {
+      "type": "logs",
+      "title": "Game Server Logs",
+      "gridPos": {"h": 10, "w": 24, "x": 0, "y": 32},
+      "datasource": {"type": "loki", "uid": "loki_ds"},
+      "targets": [
+        {
+          "expr": "{job=\"gameserver\"}",
+          "legendFormat": ""
+        }
+      ]
+    }
+  ]
+}

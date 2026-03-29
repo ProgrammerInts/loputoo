@@ -1,0 +1,46 @@
+global:
+  scrape_interval:     15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:{{ prometheus_port }}']
+
+  - job_name: 'node_exporter'
+    static_configs:
+      - targets:
+{% for host in groups['all'] | sort %}
+          - '{{ hostvars[host]["ansible_host"] }}:9100'
+{% endfor %}
+
+  - job_name: 'cadvisor'
+    static_configs:
+      - targets:
+{% for host in groups['game_servers'] | sort %}
+          - '{{ hostvars[host]["ansible_host"] }}:8080'
+{% endfor %}
+
+  - job_name: 'blackbox_tcp'
+    metrics_path: /probe
+    params:
+      module: [tcp_connect]
+    static_configs:
+      - targets:
+{% for host in groups['game_servers'] | sort %}
+          - '{{ hostvars[host]["ansible_host"] }}:25565'
+{% endfor %}
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: __param_target
+      - source_labels: [__param_target]
+        target_label: instance
+      - target_label: __address__
+        replacement: localhost:9115
+
+  - job_name: 'mc_monitor'
+    static_configs:
+      - targets:
+{% for host in groups['game_servers'] | sort %}
+          - '{{ hostvars[host]["ansible_host"] }}:26565'
+{% endfor %}

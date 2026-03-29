@@ -1,0 +1,25 @@
+services:
+  {{ server_name }}:
+    image: lloesche/valheim-server:latest
+    container_name: "{{ server_name }}"
+    restart: unless-stopped
+    cap_add:
+      - SYS_NICE
+    environment:
+      SERVER_NAME: "{{ valheim_server_name | default(server_name) }}"
+      WORLD_NAME: "{{ valheim_world_name | default('Dedicated') }}"
+      SERVER_PASS: "{{ valheim_server_pass | default('changeme') }}"
+      SERVER_PUBLIC: "{{ valheim_public | default('true') }}"
+    ports:
+      - "{{ server_port | default(2456) | int }}-{{ (server_port | default(2456) | int) + 1 }}:2456-2457/udp"
+    volumes:
+      - ./config:/config
+      - ./data:/opt/valheim
+    labels:
+      game_type: valheim
+      server_name: "{{ server_name }}"
+    logging:
+      driver: grafana/loki-docker-driver
+      options:
+        loki-url: "http://{{ monitoring_host_ip }}:{{ loki_port }}/loki/api/v1/push"
+        loki-external-labels: "job=gameserver,game_type=valheim,server_name={{ server_name }}"
