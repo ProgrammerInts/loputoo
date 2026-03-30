@@ -35,11 +35,7 @@ services:
     image: itzg/mc-monitor:latest
     container_name: "{{ server_name }}_monitor"
     restart: unless-stopped
-    environment:
-      EXPORT_FOR_BEDROCK: "false"
-      EXPORT_SERVERS: "{{ server_name }}:25565"
-      ENABLE_RCON: "true"
-      RCON_PASSWORD: "{{ minecraft_rcon_password | default('rconpassword') }}"
+    command: export-for-prometheus -servers {{ server_name }}:25565
     ports:
       - "{{ server_port | default(25565) | int + 1000 }}:8080"
     depends_on:

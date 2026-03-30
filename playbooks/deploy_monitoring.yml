@@ -6,7 +6,7 @@
 #   ansible-playbook playbooks/deploy_monitoring.yml
 
 - name: Set up monitoring VM
-  hosts: monitoring
+  hosts: "{{ target | default('monitoring') }}"
   become: true
   roles:
     - ufw

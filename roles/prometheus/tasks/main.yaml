@@ -13,6 +13,13 @@
     mode: "0644"
   notify: restart prometheus
 
+- name: Ensure mc-monitor targets directory exists
+  file:
+    path: /etc/prometheus/targets
+    state: directory
+    mode: "0755"
+    owner: prometheus
+
 - name: Ensure Prometheus is running
   service:
     name: prometheus

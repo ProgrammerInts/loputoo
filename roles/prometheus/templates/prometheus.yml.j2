@@ -39,8 +39,7 @@ scrape_configs:
         replacement: localhost:9115
 
   - job_name: 'mc_monitor'
-    static_configs:
-      - targets:
-{% for host in groups['game_servers'] | sort %}
-          - '{{ hostvars[host]["ansible_host"] }}:26565'
-{% endfor %}
+    file_sd_configs:
+      - files:
+          - /etc/prometheus/targets/*.json
+        refresh_interval: 30s

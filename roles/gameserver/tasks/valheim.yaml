@@ -1,0 +1,26 @@
+---
+- name: Create Valheim server directory
+  file:
+    path: "/opt/gameservers/{{ server_name }}"
+    state: directory
+    mode: "0755"
+
+- name: Template Valheim Docker Compose file
+  template:
+    src: valheim/docker-compose.yml.j2
+    dest: "/opt/gameservers/{{ server_name }}/docker-compose.yml"
+    mode: "0644"
+
+- name: Open Valheim UDP ports in firewall
+  ufw:
+    rule: allow
+    port: "{{ item }}"
+    proto: udp
+  loop:
+    - "{{ server_port | int }}"
+    - "{{ server_port | int + 1 }}"
+
+- name: Start Valheim server
+  community.docker.docker_compose_v2:
+    project_src: "/opt/gameservers/{{ server_name }}"
+    state: present

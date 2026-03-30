@@ -1,0 +1,35 @@
+---
+- name: Create Minecraft server directories
+  file:
+    path: "/opt/gameservers/{{ server_name }}/{{ item }}"
+    state: directory
+    mode: "0755"
+  loop:
+    - ""
+    - mods
+    - plugins
+    - world
+
+- name: Template Minecraft Docker Compose file
+  template:
+    src: minecraft/docker-compose.yml.j2
+    dest: "/opt/gameservers/{{ server_name }}/docker-compose.yml"
+    mode: "0644"
+
+- name: Open Minecraft TCP port in firewall
+  ufw:
+    rule: allow
+    port: "{{ server_port }}"
+    proto: tcp
+
+- name: Allow mc-monitor metrics port from monitoring VM only
+  ufw:
+    rule: allow
+    port: "{{ server_port | int + 1000 }}"
+    proto: tcp
+    src: "{{ monitoring_host_ip }}"
+
+- name: Start Minecraft server
+  community.docker.docker_compose_v2:
+    project_src: "/opt/gameservers/{{ server_name }}"
+    state: present

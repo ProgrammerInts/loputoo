@@ -20,5 +20,5 @@
 - name: Add SSH public key for bootstrap user
   authorized_key:
     user: gsdeploy_install
-    key: "{{ lookup('file', ansible_ssh_private_key_file ~ '.pub') }}"
+    key: "{{ lookup('file', deployer_ssh_key ~ '.pub') }}"
     state: present

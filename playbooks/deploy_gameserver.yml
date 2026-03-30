@@ -2,20 +2,31 @@
 # Deploys a single game server container on the target VM.
 #
 # Required variables:
-#   target    - inventory hostname of the game server VM
-#   game_type - type of game server (minecraft, valheim)
-#   name      - unique name for this server instance
-#   port      - host port to expose the game server on
+#   target      - inventory hostname of the game server VM
+#   game_type   - type of game server (minecraft, valheim)
+#   server_name - unique name for this server instance
+#   server_port - host port to expose the game server on
 #
 # Usage:
 #   ansible-playbook playbooks/deploy_gameserver.yml \
-#     -e "target=gamevm-01 game_type=minecraft name=survival port=25565"
+#     -e "target=gamevm-01 game_type=minecraft server_name=survival server_port=25565"
 
 - name: Deploy game server
   hosts: "{{ target }}"
   become: true
-  vars:
-    server_name: "{{ name }}"
-    server_port: "{{ port }}"
   roles:
     - gameserver
+
+- name: Register mc-monitor target with Prometheus
+  hosts: monitoring
+  become: true
+  ignore_unreachable: true
+  tasks:
+    - name: Write mc-monitor target file for {{ server_name }}
+      copy:
+        content: |
+          [{"targets": ["{{ hostvars[target]['ansible_host'] }}:{{ server_port | int + 1000 }}"], "labels": {"server_name": "{{ server_name }}", "game_type": "{{ game_type }}"}}]
+        dest: "/etc/prometheus/targets/{{ server_name }}.json"
+        mode: "0644"
+        owner: prometheus
+      when: game_type == 'minecraft'

@@ -4,13 +4,16 @@
 # sets up the permanent admin user and all services, then removes the bootstrap user.
 #
 # Required variables:
-#   target           - inventory hostname of the VM to provision
-#   initial_user     - existing sudo-capable user to connect with initially
-#   admin_username   - username for the permanent admin user
+#   target              - inventory hostname of the VM to provision
+#   initial_user        - existing sudo-capable user to connect with initially
+#   initial_ssh_pass    - SSH password for the initial user (also used as sudo password)
+#   admin_username      - username for the permanent admin user
+#   deployer_ssh_key    - path to the deployer's SSH private key (public key installed on VM)
 #
 # Usage:
 #   ansible-playbook playbooks/provision_vm.yml \
-#     -e "target=gamevm-01 initial_user=ubuntu admin_username=gameadmin"
+#     -e "target=gamevm-01 initial_user=ubuntu admin_username=gameadmin deployer_ssh_key=~/.ssh/id_ed25519" \
+#     -e @/tmp/secrets.yaml   # contains initial_ssh_pass, initial_become_pass, admin_password
 
 # Play 1: Connect as the operator's user, create bootstrap user
 - name: Create bootstrap user
@@ -18,6 +21,8 @@
   become: true
   vars:
     ansible_user: "{{ initial_user }}"
+    ansible_password: "{{ initial_ssh_pass }}"
+    ansible_ssh_private_key_file: ~
     ansible_become_pass: "{{ initial_become_pass }}"
   roles:
     - bootstrap_user
@@ -36,22 +41,9 @@
     - cadvisor
     - promtail
   post_tasks:
-    - name: Display admin credentials
+    - name: Provisioning complete
       debug:
-        msg:
-          - "Provisioning complete!"
-          - "Username : {{ admin_credentials.username }}"
-          - "Password : {{ admin_credentials.password }}"
-          - "SSH key  : already installed"
-
-    - name: Save admin credentials to local Documents folder
-      delegate_to: localhost
-      become: false
-      lineinfile:
-        path: "{{ lookup('env', 'HOME') }}/Documents/gsdeploy_credentials.txt"
-        line: "{{ ansible_host }} | {{ admin_credentials.username }} | {{ admin_credentials.password }}"
-        create: yes
-        mode: "0600"
+        msg: "Provisioning complete! Admin user '{{ admin_username }}' created."
 
 # Play 3: Remove bootstrap user (connect as initial_user to avoid self-deletion)
 - name: Clean up bootstrap user
@@ -59,6 +51,8 @@
   become: true
   vars:
     ansible_user: "{{ initial_user }}"
+    ansible_password: "{{ initial_ssh_pass }}"
+    ansible_ssh_private_key_file: ~
     ansible_become_pass: "{{ initial_become_pass }}"
   roles:
     - cleanup
