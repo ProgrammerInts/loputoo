@@ -1,137 +1,202 @@
 # GSDeploy
 
-Ansible-based tool for deploying and monitoring game servers on self-hosted VMs.
-Designed to be managed via the GSDeploy desktop application (in development).
+GSDeploy is a desktop application for deploying, and monitoring game servers on virtual machines using Ansible and Docker.
+
+It provides a simple GUI for managing infrastructure and deploying game servers without manual configuration.
 
 ---
 
-## Requirements
+## Features
 
-### Control Machine (where you run Ansible)
-- Ansible
-- Python 3 + `passlib` (`pip install passlib`)
-- `sshpass` (`sudo apt install sshpass`)
-- SSH key pair at `~/.ssh/id_ed25519`
+- Set up existing virtual machines automatically using Ansible
+- Deploy containerized game servers (Minecraft, Valheim)
+- Integrated monitoring stack (Grafana, Prometheus, Loki)
+- Real-time Docker log viewer per server
+- GTK4 desktop interface
 
-Install Ansible collections:
-```bash
-ansible-galaxy collection install -r requirements.txt
-```
+---
 
-### VM Requirements
+## System Requirements
+
+### Control Machine (your computer)
+
+- Ubuntu 22.04 or Debian 12
+- Python 3.10+
+- SSH access to target VMs
+
+### Target VM
 
 | Component | Minimum | Recommended |
 |---|---|---|
 | OS | Ubuntu 22.04 / Debian 12 | Ubuntu 22.04 LTS |
 | CPU | 2 cores | 4 cores |
-| RAM | 2GB | 8GB |
-| Disk | 20GB | 40GB |
+| RAM | 2 GB | 8 GB |
+| Disk | 20 GB | 40 GB |
 
-> **Important:** Do not create a separate `/home` partition. Game servers are installed
+> **Note:** Do not create a separate `/home` partition. Game servers are installed
 > under `/opt/gameservers/` — all disk space should be available to the root `/` partition.
 
 ### Per-Game Requirements
 
 | Game | Min RAM | Min Disk |
 |---|---|---|
-| Minecraft | 2GB | 5GB |
-| Valheim | 4GB | 10GB |
+| Minecraft | 2 GB | 5 GB |
+| Valheim | 4 GB | 10 GB |
 
 ---
 
-## VM Setup
+## Installation
 
-### 1. Bootstrap a new VM
-
-Connects as your existing sudo user, creates a temporary install user, sets up a
-permanent admin user with Docker and monitoring agents, then removes the install user.
+### 1. Install system packages
 
 ```bash
-ansible-playbook playbooks/provision_vm.yml \
-  -e "target=<hostname> initial_user=<user> admin_username=<admin>" \
-  --ask-pass \
-  -e "initial_become_pass=$(read -sp 'Become password: ' p && echo $p)"
+sudo apt update && sudo apt install -y \
+  ansible sshpass python3 python3-venv python3-gi \
+  gir1.2-gtk-4.0 gir1.2-adw-1
 ```
 
-Admin credentials are displayed at the end and saved to `~/Documents/gsdeploy_credentials.txt`.
+### 2. Set up SSH key (if you don't have one)
 
-### 2. Add VM to inventory
-
-Add the hostname to `hosts` under the appropriate group, and create a `host_vars/<hostname>.yaml`:
-
-```yaml
-ansible_host: "192.168.0.x"
-ansible_user: <admin_username>
-ansible_ssh_private_key_file: ~/.ssh/id_ed25519
+```bash
+ssh-keygen -t ed25519
 ```
+
+### 3. Set up Python environment
+
+> **Important:** Modern Ubuntu/Debian enforce PEP 668, which blocks global `pip install`.
+> You must use a virtual environment. The `--system-site-packages` flag is required so
+> GTK bindings are accessible inside the venv.
+
+```bash
+python3 -m venv venv --system-site-packages
+source venv/bin/activate
+pip install passlib
+```
+
+### 4. Install Ansible collections
+
+```bash
+ansible-galaxy collection install -r requirements.txt
+```
+
+### 5. Run GSDeploy
+
+```bash
+source venv/bin/activate
+python3 -m gsdeploy.main
+```
+
+Application data is stored at `~/.local/share/gsdeploy/gsdeploy.db`.
 
 ---
 
-## Monitoring
+## Usage
 
-Deploy Prometheus, Loki, and Grafana on a dedicated monitoring VM:
+### 1. Add a VM
 
-```bash
-ansible-playbook playbooks/deploy_monitoring.yml
-```
+In the **Virtual Machines** tab, add a VM with:
+- Display name and IP address
+- Initial SSH user (the existing user on the VM, e.g. `ubuntu`)
+- Admin username and password (the account GSDeploy will create)
+- SSH key path (default: `~/.ssh/id_ed25519`)
+
+### 2. Set up the VM
+
+Click the provision button on the VM row. This connects to your existing VM via
+password-based SSH, creates the admin user, installs Docker and monitoring agents,
+then switches all future connections to use the admin user and your SSH key.
+
+### 3. Deploy Monitoring
+
+Click **Deploy Monitoring** on the VM. Only needs to be done once per monitoring VM.
 
 Accessible at:
 - Grafana: `http://<monitoring-ip>:3000`
 - Prometheus: `http://<monitoring-ip>:9090`
 - Loki: `http://<monitoring-ip>:3100`
 
+### 4. Deploy Game Servers
+
+Use **Deploy Server** to walk through a wizard — select a VM, choose a game,
+configure settings, and deploy.
+
+### 5. Manage Servers
+
+The **Dashboard** shows all deployed servers. From there you can view live Docker
+logs or remove a server from GSDeploy.
+
 ---
 
-## Deploying Game Servers
-
-```bash
-ansible-playbook playbooks/deploy_gameserver.yml \
-  -e "target=<hostname> game_type=<game> name=<server-name> port=<port>" \
-  --ask-become-pass
-```
+## Game Configuration
 
 ### Minecraft
 
-| Variable | Default | Description |
+| Field | Default | Description |
 |---|---|---|
-| `minecraft_version` | `LATEST` | Server version (e.g. `1.21.1`) |
-| `minecraft_memory` | `2G` | RAM allocation |
-| `minecraft_difficulty` | `normal` | `peaceful`, `easy`, `normal`, `hard` |
-| `minecraft_max_players` | `20` | Max players |
-| `minecraft_motd` | server name | Message of the day |
-| `minecraft_seed` | random | World seed |
-| `minecraft_mode` | `survival` | `survival`, `creative`, `adventure` |
-
-Example:
-```bash
-ansible-playbook playbooks/deploy_gameserver.yml \
-  -e "target=gamevm game_type=minecraft name=survival port=25565 minecraft_version=1.21.1" \
-  --ask-become-pass
-```
+| Version | `LATEST` | Server version (e.g. `1.21.5`) |
+| Memory | `2G` | RAM allocation |
+| Game Mode | `survival` | `survival`, `creative`, `adventure` |
+| Difficulty | `normal` | `peaceful`, `easy`, `normal`, `hard` |
+| Max Players | `20` | Maximum concurrent players |
 
 ### Valheim
 
-| Variable | Default | Description |
+| Field | Default | Description |
 |---|---|---|
-| `valheim_server_name` | server name | Name shown in server browser |
-| `valheim_world_name` | `Dedicated` | World name |
-| `valheim_server_pass` | `changeme` | Server password |
-| `valheim_public` | `true` | Show in public server list |
-
-Example:
-```bash
-ansible-playbook playbooks/deploy_gameserver.yml \
-  -e "target=gamevm game_type=valheim name=myvalheim port=2456 valheim_server_pass=secret" \
-  --ask-become-pass
-```
+| World Name | `Dedicated` | World save name |
+| Server Password | `changeme` | Minimum 5 characters, cannot match world name |
 
 ---
 
 ## Game Server Data
 
-Game server files are stored on the VM at:
+Stored on the VM at `/opt/gameservers/<server-name>/`:
+
 ```
-/opt/gameservers/<server-name>/
-  data/    — world data
-  config/  — server configuration
+data/      — world data (Minecraft)
+config/    — server configuration (Valheim)
+mods/      — mods (Minecraft)
+plugins/   — plugins (Minecraft)
+world/     — world files (Minecraft)
 ```
+
+---
+
+## Monitoring Stack
+
+| Component | Purpose | Port |
+|---|---|---|
+| Prometheus | Metrics collection | 9090 |
+| Grafana | Dashboards | 3000 |
+| Loki | Container log aggregation | 3100 |
+| Node Exporter | VM system metrics | 9100 |
+| cAdvisor | Container resource metrics | 8080 |
+| Blackbox Exporter | TCP port probing | 9115 |
+| mc-monitor | Minecraft server metrics | game port + 1000 |
+
+---
+
+## Troubleshooting
+
+**`error: externally-managed-environment`**
+Do not use `pip install` globally. Use the venv setup above.
+
+**`No module named 'gi'`**
+GTK bindings are missing or the venv was created without `--system-site-packages`:
+```bash
+sudo apt install python3-gi gir1.2-gtk-4.0 gir1.2-adw-1
+rm -rf venv
+python3 -m venv venv --system-site-packages
+source venv/bin/activate
+```
+
+**`ansible: command not found`**
+```bash
+sudo apt install ansible
+```
+
+**SSH connection fails during provisioning**
+- Verify the IP address is correct
+- Confirm the initial SSH user exists on the VM
+- Ensure the VM allows password-based SSH login initially
+- Check the SSH key path is correct
