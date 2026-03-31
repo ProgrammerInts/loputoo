@@ -20,8 +20,10 @@ class DeployWizardPage(Gtk.Box):
         self._selected_vm    = None
         self._selected_game  = None
         self._pending_deploy = None
+        self._cancel_deploy  = None
 
         self._build_ui()
+        self.connect("map", lambda _: self._populate_vm_list())
 
     def _build_ui(self):
         # Carousel
@@ -53,8 +55,14 @@ class DeployWizardPage(Gtk.Box):
         self.next_btn.set_css_classes(["suggested-action"])
         self.next_btn.connect("clicked", self._go_next)
 
+        self.interrupt_btn = Gtk.Button(label="Interrupt")
+        self.interrupt_btn.set_css_classes(["destructive-action"])
+        self.interrupt_btn.set_visible(False)
+        self.interrupt_btn.connect("clicked", self._on_interrupt)
+
         nav.append(self.back_btn)
         nav.append(self.next_btn)
+        nav.append(self.interrupt_btn)
 
         self.append(dots)
         self.append(self.carousel)
@@ -339,6 +347,61 @@ class DeployWizardPage(Gtk.Box):
 
     # ── Deploy ───────────────────────────────────────────────────────────────
 
+    def _on_interrupt(self, _btn):
+        if self._cancel_deploy:
+            self._cancel_deploy()
+            self._cancel_deploy = None
+        self.interrupt_btn.set_visible(False)
+        self.interrupt_btn.set_sensitive(True)
+        self._append_log("\n⚠ Interrupted by user.\n")
+        p = self._pending_deploy
+        if p:
+            dialog = Adw.AlertDialog(
+                heading="Clean up partial deployment?",
+                body=f"The deployment of '{p['name']}' was interrupted. "
+                     "Do you want to remove any partially deployed container? "
+                     "Server data will be kept.",
+            )
+            dialog.add_response("keep", "Keep")
+            dialog.add_response("cleanup", "Clean Up")
+            dialog.set_response_appearance("cleanup", Adw.ResponseAppearance.DESTRUCTIVE)
+            dialog.set_default_response("keep")
+            dialog.set_close_response("keep")
+            dialog.connect("response", self._on_interrupt_cleanup)
+            dialog.present(self)
+        else:
+            self.next_btn.set_sensitive(True)
+            self.back_btn.set_sensitive(True)
+            self.next_btn.set_label("Deploy Again")
+
+    def _on_interrupt_cleanup(self, _dialog, response):
+        p = self._pending_deploy
+        vm = self._selected_vm
+        self.next_btn.set_sensitive(False)
+        self.back_btn.set_sensitive(False)
+        if response == "cleanup" and p and vm:
+            self._append_log(f"\nCleaning up '{p['name']}'...\n")
+            runner.run_remove_gameserver(
+                vm_name=vm["hostname"],
+                server_name=p["name"],
+                become_pass=vm["admin_password"],
+                log_callback=self._append_log,
+                done_callback=lambda ok: self._on_cleanup_done(ok),
+            )
+        else:
+            self.next_btn.set_sensitive(True)
+            self.back_btn.set_sensitive(True)
+            self.next_btn.set_label("Deploy Again")
+
+    def _on_cleanup_done(self, ok):
+        if ok:
+            self._append_log("✓ Cleanup complete.\n")
+        else:
+            self._append_log("✗ Cleanup failed — check the VM manually.\n")
+        self.next_btn.set_sensitive(True)
+        self.back_btn.set_sensitive(True)
+        self.next_btn.set_label("Deploy Again")
+
     def _start_deploy(self):
         self.log_buffer.set_text("")
         self.next_btn.set_sensitive(False)
@@ -369,12 +432,14 @@ class DeployWizardPage(Gtk.Box):
                                 "game_type": game, "port": port, "version": version}
 
         self._append_log(f"Deploying {game} server '{server_name}' on {vm['name']}...\n\n")
+        self.interrupt_btn.set_visible(True)
 
-        runner.run_deploy_gameserver(
+        self._cancel_deploy = runner.run_deploy_gameserver(
             vm_name=vm["hostname"],
             game_type=game,
             server_name=server_name,
             port=port,
+            admin_username=vm["admin_username"],
             extra_vars=extra_vars,
             become_pass=become_pass,
             log_callback=self._append_log,
@@ -382,6 +447,8 @@ class DeployWizardPage(Gtk.Box):
         )
 
     def _on_deploy_done(self, success):
+        self._cancel_deploy = None
+        self.interrupt_btn.set_visible(False)
         if success:
             self._append_log("\n✓ Deployment completed successfully!\n")
             p = self._pending_deploy

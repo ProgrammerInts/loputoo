@@ -3,13 +3,17 @@
   file:
     path: "/opt/gameservers/{{ server_name }}"
     state: directory
-    mode: "0755"
+    owner: "{{ admin_username }}"
+    group: "{{ admin_username }}"
+    mode: "0750"
 
 - name: Template Valheim Docker Compose file
   template:
     src: valheim/docker-compose.yml.j2
     dest: "/opt/gameservers/{{ server_name }}/docker-compose.yml"
-    mode: "0644"
+    owner: "{{ admin_username }}"
+    group: "{{ admin_username }}"
+    mode: "0640"
 
 - name: Open Valheim UDP ports in firewall
   ufw:

@@ -1,0 +1,22 @@
+---
+# Stops and removes a game server container and its compose project.
+# Server data directories are left intact.
+#
+# Required variables:
+#   target      - inventory hostname of the game server VM
+#   server_name - name of the server instance to remove
+
+- name: Remove game server container
+  hosts: "{{ target }}"
+  become: true
+  tasks:
+    - name: Stop and remove game server container
+      community.docker.docker_compose_v2:
+        project_src: "/opt/gameservers/{{ server_name }}"
+        state: absent
+        remove_orphans: true
+
+    - name: Remove docker-compose.yml
+      file:
+        path: "/opt/gameservers/{{ server_name }}/docker-compose.yml"
+        state: absent

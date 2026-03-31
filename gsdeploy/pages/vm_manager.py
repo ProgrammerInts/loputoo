@@ -145,35 +145,56 @@ class VMManagerPage(Gtk.Box):
         scroll.set_visible(False)
         self._mon_scroll = scroll
 
+        btn_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+        btn_box.set_halign(Gtk.Align.CENTER)
+        btn_box.set_margin_top(8)
+        btn_box.set_margin_bottom(16)
+
         deploy_btn = Gtk.Button(label="Deploy")
         deploy_btn.set_css_classes(["suggested-action", "pill"])
-        deploy_btn.set_margin_start(16)
-        deploy_btn.set_margin_end(16)
-        deploy_btn.set_margin_top(8)
-        deploy_btn.set_margin_bottom(16)
-        deploy_btn.connect("clicked", self._run_monitoring_deploy, vm, dialog)
+
+        interrupt_btn = Gtk.Button(label="Interrupt")
+        interrupt_btn.set_css_classes(["destructive-action", "pill"])
+        interrupt_btn.set_visible(False)
+
+        deploy_btn.connect("clicked", self._run_monitoring_deploy, vm, dialog, deploy_btn, interrupt_btn)
+        interrupt_btn.connect("clicked", self._interrupt_monitoring, interrupt_btn, deploy_btn)
+
+        btn_box.append(deploy_btn)
+        btn_box.append(interrupt_btn)
 
         content.append(scroll)
-        content.append(deploy_btn)
+        content.append(btn_box)
         toolbar_view.set_content(content)
         dialog.set_child(toolbar_view)
         dialog.present(self)
 
-    def _run_monitoring_deploy(self, btn, vm, dialog):
+    def _run_monitoring_deploy(self, _btn, vm, dialog, deploy_btn, interrupt_btn):
         self._mon_scroll.set_visible(True)
-        btn.set_sensitive(False)
+        deploy_btn.set_sensitive(False)
+        interrupt_btn.set_visible(True)
 
         def _on_mon_done(ok):
-            btn.set_sensitive(True)
+            deploy_btn.set_sensitive(True)
+            interrupt_btn.set_visible(False)
+            self._mon_cancel = None
             if ok:
                 db.set_setting("monitoring_deployed", "1")
 
-        runner.run_deploy_monitoring(
+        self._mon_cancel = runner.run_deploy_monitoring(
             vm_name=vm["hostname"],
             become_pass=vm["admin_password"],
             log_callback=self._mon_log,
             done_callback=_on_mon_done,
         )
+
+    def _interrupt_monitoring(self, _btn, interrupt_btn, deploy_btn):
+        if getattr(self, "_mon_cancel", None):
+            self._mon_cancel()
+            self._mon_cancel = None
+        interrupt_btn.set_visible(False)
+        deploy_btn.set_sensitive(True)
+        self._mon_log("\n⚠ Interrupted by user. Monitoring may be partially installed.\n")
 
     def _mon_log(self, text):
         end = self._mon_log_buffer.get_end_iter()
@@ -323,28 +344,41 @@ class VMManagerPage(Gtk.Box):
         scroll.set_visible(False)
         self._prov_scroll = scroll
 
+        btn_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+        btn_box.set_halign(Gtk.Align.CENTER)
+        btn_box.set_margin_top(8)
+        btn_box.set_margin_bottom(16)
+
         provision_btn = Gtk.Button(label="Provision")
         provision_btn.set_css_classes(["suggested-action", "pill"])
-        provision_btn.set_margin_start(16)
-        provision_btn.set_margin_end(16)
-        provision_btn.set_margin_top(8)
-        provision_btn.set_margin_bottom(16)
-        provision_btn.connect("clicked", self._run_provision, vm, dialog)
+
+        interrupt_btn = Gtk.Button(label="Interrupt")
+        interrupt_btn.set_css_classes(["destructive-action", "pill"])
+        interrupt_btn.set_visible(False)
+
+        provision_btn.connect("clicked", self._run_provision, vm, dialog, provision_btn, interrupt_btn)
+        interrupt_btn.connect("clicked", self._interrupt_provision, interrupt_btn, provision_btn)
+
+        btn_box.append(provision_btn)
+        btn_box.append(interrupt_btn)
 
         content.append(group)
         content.append(scroll)
-        content.append(provision_btn)
+        content.append(btn_box)
         toolbar_view.set_content(content)
         dialog.set_child(toolbar_view)
         dialog.present(self)
 
-    def _run_provision(self, btn, vm, dialog):
+    def _run_provision(self, _btn, vm, dialog, provision_btn, interrupt_btn):
         become_pass = self._prov_become_row.get_text()
         self._prov_scroll.set_visible(True)
-        btn.set_sensitive(False)
+        provision_btn.set_sensitive(False)
+        interrupt_btn.set_visible(True)
 
         def on_done(success):
-            btn.set_sensitive(True)
+            provision_btn.set_sensitive(True)
+            interrupt_btn.set_visible(False)
+            self._prov_cancel = None
             if success:
                 db.set_vm_ssh_user(vm["id"], vm["admin_username"])
                 runner.add_to_inventory(
@@ -352,7 +386,7 @@ class VMManagerPage(Gtk.Box):
                 )
                 self._refresh()
 
-        runner.run_provision_vm(
+        self._prov_cancel = runner.run_provision_vm(
             hostname=vm["hostname"],
             initial_user=vm["initial_user"],
             initial_ssh_pass=become_pass,
@@ -362,6 +396,14 @@ class VMManagerPage(Gtk.Box):
             log_callback=self._prov_log,
             done_callback=on_done,
         )
+
+    def _interrupt_provision(self, _btn, interrupt_btn, provision_btn):
+        if getattr(self, "_prov_cancel", None):
+            self._prov_cancel()
+            self._prov_cancel = None
+        interrupt_btn.set_visible(False)
+        provision_btn.set_sensitive(True)
+        self._prov_log("\n⚠ Interrupted by user. VM may be partially provisioned — re-run provisioning to fix.\n")
 
     def _prov_log(self, text):
         end = self._prov_log_buffer.get_end_iter()

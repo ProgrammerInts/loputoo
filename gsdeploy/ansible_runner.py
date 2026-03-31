@@ -55,47 +55,30 @@ def remove_from_inventory(hostname):
         f.writelines(filtered)
 
 
-def run_deploy_gameserver(vm_name, game_type, server_name, port, extra_vars,
-                          become_pass, log_callback, done_callback):
+def _run_playbook(cmd, env, become_pass, log_callback, done_callback):
     """
-    Run deploy_gameserver.yml in a background thread.
-    Streams stdout/stderr line by line via log_callback (called on GTK main loop).
-    Calls done_callback(success: bool) when finished.
+    Run an Ansible playbook in a background thread, streaming output.
+    Returns a cancel() function that kills the process.
     """
-    extra = {
-        "target":      vm_name,
-        "game_type":   game_type,
-        "server_name": server_name,
-        "server_port": str(port),
-    }
-    extra.update(extra_vars)
-
-    env = os.environ.copy()
-    env["ANSIBLE_CONFIG"] = os.path.join(ANSIBLE_CFG, "ansible.cfg")
+    proc_ref = [None]
 
     def _run():
         with tempfile.NamedTemporaryFile(mode="w", suffix=".pass", delete=False) as tf:
             tf.write(become_pass + "\n")
             tf_path = tf.name
         try:
-            cmd = ["ansible-playbook", os.path.join(PLAYBOOK_DIR, "deploy_gameserver.yml")]
-            for k, v in extra.items():
-                cmd += ["-e", f"{k}={v}"]
-            cmd += ["--become-password-file", tf_path]
             proc = subprocess.Popen(
-                cmd,
+                cmd + ["--become-password-file", tf_path],
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT,
                 text=True,
                 env=env,
             )
+            proc_ref[0] = proc
             for line in proc.stdout:
                 GLib.idle_add(log_callback, line)
-
             proc.wait()
-            success = proc.returncode == 0
-            GLib.idle_add(done_callback, success)
-
+            GLib.idle_add(done_callback, proc.returncode == 0)
         except Exception as e:
             GLib.idle_add(log_callback, f"ERROR: {e}\n")
             GLib.idle_add(done_callback, False)
@@ -104,15 +87,47 @@ def run_deploy_gameserver(vm_name, game_type, server_name, port, extra_vars,
 
     threading.Thread(target=_run, daemon=True).start()
 
+    def cancel():
+        if proc_ref[0] and proc_ref[0].poll() is None:
+            proc_ref[0].kill()
+
+    return cancel
+
+
+def run_deploy_gameserver(vm_name, game_type, server_name, port, admin_username,
+                          extra_vars, become_pass, log_callback, done_callback):
+    """
+    Run deploy_gameserver.yml in a background thread.
+    Returns a cancel() function that kills the process.
+    """
+    extra = {
+        "target":         vm_name,
+        "game_type":      game_type,
+        "server_name":    server_name,
+        "server_port":    str(port),
+        "admin_username": admin_username,
+    }
+    extra.update(extra_vars)
+
+    env = os.environ.copy()
+    env["ANSIBLE_CONFIG"] = os.path.join(ANSIBLE_CFG, "ansible.cfg")
+
+    cmd = ["ansible-playbook", os.path.join(PLAYBOOK_DIR, "deploy_gameserver.yml")]
+    for k, v in extra.items():
+        cmd += ["-e", f"{k}={v}"]
+
+    return _run_playbook(cmd, env, become_pass, log_callback, done_callback)
+
 
 def run_provision_vm(hostname, initial_user, initial_ssh_pass, admin_username, admin_password,
                      deployer_ssh_key, log_callback, done_callback):
     """
     Run provision_vm.yml in a background thread.
-    Calls done_callback(success: bool) when finished.
+    Returns a cancel() function that kills the process.
     """
     env = os.environ.copy()
     env["ANSIBLE_CONFIG"] = os.path.join(ANSIBLE_CFG, "ansible.cfg")
+    proc_ref = [None]
 
     def _run():
         with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as tf:
@@ -129,25 +144,117 @@ def run_provision_vm(hostname, initial_user, initial_ssh_pass, admin_username, a
                        f"admin_username={admin_username} deployer_ssh_key={deployer_ssh_key}"),
                 "-e", f"@{tf_path}",
             ]
-            proc = subprocess.Popen(
-                cmd,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT,
-                text=True,
-                env=env,
-            )
+            proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                                    text=True, env=env)
+            proc_ref[0] = proc
             for line in proc.stdout:
                 GLib.idle_add(log_callback, line)
-
             proc.wait()
-            success = proc.returncode == 0
-            GLib.idle_add(done_callback, success)
-
+            GLib.idle_add(done_callback, proc.returncode == 0)
         except Exception as e:
             GLib.idle_add(log_callback, f"ERROR: {e}\n")
             GLib.idle_add(done_callback, False)
         finally:
             os.unlink(tf_path)
+
+    threading.Thread(target=_run, daemon=True).start()
+
+    def cancel():
+        if proc_ref[0] and proc_ref[0].poll() is None:
+            proc_ref[0].kill()
+
+    return cancel
+
+
+def run_remove_gameserver(vm_name, server_name, become_pass, log_callback, done_callback):
+    """
+    Run remove_gameserver.yml in a background thread.
+    Stops and removes the container but leaves data directories intact.
+    """
+    env = os.environ.copy()
+    env["ANSIBLE_CONFIG"] = os.path.join(ANSIBLE_CFG, "ansible.cfg")
+    cmd = [
+        "ansible-playbook",
+        os.path.join(PLAYBOOK_DIR, "remove_gameserver.yml"),
+        "-e", f"target={vm_name}",
+        "-e", f"server_name={server_name}",
+    ]
+    return _run_playbook(cmd, env, become_pass, log_callback, done_callback)
+
+
+def docker_action(ip, ssh_user, ssh_key, admin_password, container, action, done_callback):
+    """
+    Run `docker start` or `docker stop` on a remote container over SSH.
+    action: "start" or "stop"
+    """
+    import shlex
+
+    def _run():
+        key = os.path.expanduser(ssh_key)
+        monitor = shlex.quote(container + "_monitor")
+        main = shlex.quote(container)
+        if action == "stop":
+            # Stop monitor immediately, give main server up to 60s to save
+            remote_cmd = (
+                f"echo {shlex.quote(admin_password)} | sudo -S sh -c "
+                f"'docker stop --time 2 {monitor} 2>/dev/null; docker stop --time 60 {main}'"
+            )
+        else:
+            remote_cmd = (
+                f"echo {shlex.quote(admin_password)} | sudo -S sh -c "
+                f"'docker start {main} {monitor}'"
+            )
+        cmd = [
+            "ssh", "-i", key,
+            "-o", "StrictHostKeyChecking=no",
+            "-o", "BatchMode=yes",
+            "-o", "ServerAliveInterval=10",
+            "-o", "ServerAliveCountMax=12",
+            f"{ssh_user}@{ip}",
+            remote_cmd,
+        ]
+        try:
+            proc = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
+            if proc.returncode == 0:
+                GLib.idle_add(done_callback, True, None)
+            else:
+                error = (proc.stderr.strip() or proc.stdout.strip() or
+                         f"exit code {proc.returncode}")
+                GLib.idle_add(done_callback, False, error)
+        except subprocess.TimeoutExpired:
+            GLib.idle_add(done_callback, False, "Timed out waiting for response")
+        except Exception as e:
+            GLib.idle_add(done_callback, False, str(e))
+
+    threading.Thread(target=_run, daemon=True).start()
+
+
+def get_container_status(ip, ssh_user, ssh_key, admin_password, container, done_callback):
+    """
+    Returns the container status string ("running", "exited", etc.) via done_callback,
+    or None if the container doesn't exist or SSH fails.
+    """
+    import shlex
+
+    def _run():
+        key = os.path.expanduser(ssh_key)
+        remote_cmd = (
+            f"echo {shlex.quote(admin_password)} | sudo -S "
+            f"docker inspect --format={{{{.State.Status}}}} {shlex.quote(container)} 2>/dev/null"
+        )
+        cmd = [
+            "ssh", "-i", key,
+            "-o", "StrictHostKeyChecking=no",
+            "-o", "BatchMode=yes",
+            f"{ssh_user}@{ip}",
+            remote_cmd,
+        ]
+        try:
+            proc = subprocess.run(cmd, capture_output=True, text=True)
+            status = proc.stdout.strip() if proc.returncode == 0 else None
+            GLib.idle_add(done_callback, status)
+        except Exception:
+            GLib.idle_add(done_callback, None)
 
     threading.Thread(target=_run, daemon=True).start()
 
@@ -197,41 +304,13 @@ def stream_docker_logs(ip, ssh_user, ssh_key, admin_password, container, log_cal
 def run_deploy_monitoring(vm_name, become_pass, log_callback, done_callback):
     """
     Run deploy_monitoring.yml in a background thread, targeting vm_name.
-    Streams stdout/stderr line by line via log_callback (called on GTK main loop).
-    Calls done_callback(success: bool) when finished.
+    Returns a cancel() function that kills the process.
     """
     env = os.environ.copy()
     env["ANSIBLE_CONFIG"] = os.path.join(ANSIBLE_CFG, "ansible.cfg")
-
-    def _run():
-        with tempfile.NamedTemporaryFile(mode="w", suffix=".pass", delete=False) as tf:
-            tf.write(become_pass + "\n")
-            tf_path = tf.name
-        try:
-            cmd = [
-                "ansible-playbook",
-                os.path.join(PLAYBOOK_DIR, "deploy_monitoring.yml"),
-                "-e", f"target={vm_name}",
-                "--become-password-file", tf_path,
-            ]
-            proc = subprocess.Popen(
-                cmd,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT,
-                text=True,
-                env=env,
-            )
-            for line in proc.stdout:
-                GLib.idle_add(log_callback, line)
-
-            proc.wait()
-            success = proc.returncode == 0
-            GLib.idle_add(done_callback, success)
-
-        except Exception as e:
-            GLib.idle_add(log_callback, f"ERROR: {e}\n")
-            GLib.idle_add(done_callback, False)
-        finally:
-            os.unlink(tf_path)
-
-    threading.Thread(target=_run, daemon=True).start()
+    cmd = [
+        "ansible-playbook",
+        os.path.join(PLAYBOOK_DIR, "deploy_monitoring.yml"),
+        "-e", f"target={vm_name}",
+    ]
+    return _run_playbook(cmd, env, become_pass, log_callback, done_callback)

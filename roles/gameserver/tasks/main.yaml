@@ -1,8 +1,18 @@
 ---
+- name: Look up admin user UID/GID
+  ansible.builtin.getent:
+    database: passwd
+    key: "{{ admin_username }}"
+
+- name: Set admin UID and GID facts
+  set_fact:
+    admin_uid: "{{ getent_passwd[admin_username][1] }}"
+    admin_gid: "{{ getent_passwd[admin_username][2] }}"
+
 - name: Deploy Minecraft server
-  import_tasks: minecraft.yaml
+  include_tasks: minecraft.yaml
   when: game_type == 'minecraft'
 
 - name: Deploy Valheim server
-  import_tasks: valheim.yaml
+  include_tasks: valheim.yaml
   when: game_type == 'valheim'

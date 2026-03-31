@@ -4,6 +4,8 @@ services:
     container_name: "{{ server_name }}"
     restart: unless-stopped
     environment:
+      UID: "{{ admin_uid }}"
+      GID: "{{ admin_gid }}"
       EULA: "TRUE"
       VERSION: "{{ minecraft_version | default('LATEST') }}"
       MEMORY: "{{ minecraft_memory | default('2G') }}"
@@ -25,11 +27,17 @@ services:
     labels:
       game_type: minecraft
       server_name: "{{ server_name }}"
+    stop_grace_period: 60s
     logging:
       driver: grafana/loki-docker-driver
       options:
         loki-url: "http://{{ monitoring_host_ip }}:{{ loki_port }}/loki/api/v1/push"
         loki-external-labels: "job=gameserver,game_type=minecraft,server_name={{ server_name }}"
+        loki-retries: "1"
+        loki-timeout: "2s"
+        no-file: "false"
+        mode: "non-blocking"
+        max-buffer-size: "4m"
 
   {{ server_name }}_monitor:
     image: itzg/mc-monitor:latest
