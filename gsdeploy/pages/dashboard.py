@@ -47,7 +47,7 @@ class DashboardPage(Gtk.Box):
         while self._content.get_first_child():
             self._content.remove(self._content.get_first_child())
 
-        vms = db.get_vms()
+        vms = db.get_vms_by_type("game")
 
         if not vms:
             status = Adw.StatusPage()

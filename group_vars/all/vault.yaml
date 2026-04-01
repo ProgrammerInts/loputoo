@@ -1,3 +1,3 @@
 ---
 # Encrypt this file with: ansible-vault encrypt group_vars/vault.yaml
-vault_grafana_password: changeme
+vault_grafana_password: admin

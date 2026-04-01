@@ -3,6 +3,7 @@ gi.require_version("Gtk", "4.0")
 gi.require_version("Adw", "1")
 from gi.repository import Adw, Gtk
 
+from gsdeploy.pages.guide import GuidePage
 from gsdeploy.pages.dashboard import DashboardPage
 from gsdeploy.pages.vm_manager import VMManagerPage
 from gsdeploy.pages.deploy_wizard import DeployWizardPage
@@ -10,6 +11,7 @@ from gsdeploy.pages.monitoring import MonitoringPage
 
 
 NAV_ITEMS = [
+    ("Guide",            "help-about-symbolic",              GuidePage),
     ("Dashboard",        "org.gnome.SystemMonitor-symbolic",  DashboardPage),
     ("Virtual Machines", "computer-symbolic",                VMManagerPage),
     ("Deploy Server",    "system-run-symbolic",              DeployWizardPage),

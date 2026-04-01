@@ -96,7 +96,7 @@ class DeployWizardPage(Gtk.Box):
             self._vm_group_box.remove(child)
 
         group = Adw.PreferencesGroup()
-        vms = db.get_vms()
+        vms = db.get_vms_by_type("game")
 
         if not vms:
             row = Adw.ActionRow(title="No VMs found", subtitle="Add a VM in Virtual Machines first")
