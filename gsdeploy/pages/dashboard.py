@@ -1,4 +1,5 @@
 import gi
+import os
 gi.require_version("Gtk", "4.0")
 gi.require_version("Adw", "1")
 from gi.repository import Adw, Gtk
@@ -70,6 +71,11 @@ class DashboardPage(Gtk.Box):
                 title=vm["name"],
                 description=f"{vm['ssh_user']}@{vm['ip']}",
             )
+            public_ip_btn = Gtk.Button(icon_name="network-transmit-receive-symbolic")
+            public_ip_btn.set_css_classes(["flat"])
+            public_ip_btn.set_tooltip_text("Get public IP")
+            public_ip_btn.connect("clicked", self._on_get_public_ip, dict(vm), public_ip_btn)
+            group.set_header_suffix(public_ip_btn)
 
             for srv in servers:
                 icon = GAME_ICONS.get(srv["game_type"], "applications-games-symbolic")
@@ -99,11 +105,19 @@ class DashboardPage(Gtk.Box):
                 stop_btn.set_tooltip_text("Stop server")
                 stop_btn.set_sensitive(False)
 
-                play_btn.connect("clicked", self._on_start, dict(srv), dict(vm), play_btn, stop_btn)
-                stop_btn.connect("clicked", self._on_stop, dict(srv), dict(vm), play_btn, stop_btn)
+                restart_btn = Gtk.Button(icon_name="view-refresh-symbolic")
+                restart_btn.set_css_classes(["flat"])
+                restart_btn.set_valign(Gtk.Align.CENTER)
+                restart_btn.set_tooltip_text("Restart server")
+                restart_btn.set_sensitive(False)
+
+                play_btn.connect("clicked", self._on_start, dict(srv), dict(vm), play_btn, stop_btn, restart_btn)
+                stop_btn.connect("clicked", self._on_stop, dict(srv), dict(vm), play_btn, stop_btn, restart_btn)
+                restart_btn.connect("clicked", self._on_restart, dict(srv), dict(vm), play_btn, stop_btn, restart_btn)
 
                 row.add_suffix(play_btn)
                 row.add_suffix(stop_btn)
+                row.add_suffix(restart_btn)
 
                 logs_btn = Gtk.Button(icon_name="utilities-terminal-symbolic")
                 logs_btn.set_css_classes(["flat"])
@@ -111,6 +125,21 @@ class DashboardPage(Gtk.Box):
                 logs_btn.set_tooltip_text("View logs")
                 logs_btn.connect("clicked", self._on_view_logs, dict(srv), dict(vm))
                 row.add_suffix(logs_btn)
+
+                files_btn = Gtk.Button(icon_name="folder-open-symbolic")
+                files_btn.set_css_classes(["flat"])
+                files_btn.set_valign(Gtk.Align.CENTER)
+                files_btn.set_tooltip_text("Open server files in terminal")
+                files_btn.connect("clicked", self._on_open_files, dict(srv), dict(vm))
+                row.add_suffix(files_btn)
+
+                if srv["game_type"] in ("minecraft", "vintagestory"):
+                    console_btn = Gtk.Button(icon_name="input-keyboard-symbolic")
+                    console_btn.set_css_classes(["flat"])
+                    console_btn.set_valign(Gtk.Align.CENTER)
+                    console_btn.set_tooltip_text("Open server console")
+                    console_btn.connect("clicked", self._on_open_console, dict(srv), dict(vm))
+                    row.add_suffix(console_btn)
 
                 remove_btn = Gtk.Button(icon_name="user-trash-symbolic")
                 remove_btn.set_css_classes(["flat", "destructive-action"])
@@ -122,7 +151,7 @@ class DashboardPage(Gtk.Box):
                 group.add(row)
 
                 # Fetch status asynchronously and update buttons
-                self._fetch_status(dict(vm), dict(srv), play_btn, stop_btn)
+                self._fetch_status(dict(vm), dict(srv), play_btn, stop_btn, restart_btn)
 
             self._content.append(group)
 
@@ -136,13 +165,14 @@ class DashboardPage(Gtk.Box):
 
     # ── Start / Stop ─────────────────────────────────────────────────────────
 
-    def _fetch_status(self, vm, srv, play_btn, stop_btn):
+    def _fetch_status(self, vm, srv, play_btn, stop_btn, restart_btn):
         def on_status(status):
             running = status == "running"
             play_btn.set_visible(not running)
             stop_btn.set_visible(running)
             play_btn.set_sensitive(True)
             stop_btn.set_sensitive(True)
+            restart_btn.set_sensitive(running)
 
         runner.get_container_status(
             ip=vm["ip"],
@@ -153,16 +183,17 @@ class DashboardPage(Gtk.Box):
             done_callback=on_status,
         )
 
-    def _on_start(self, _btn, srv, vm, play_btn, stop_btn):
+    def _on_start(self, _btn, srv, vm, play_btn, stop_btn, restart_btn):
         play_btn.set_sensitive(False)
         stop_btn.set_sensitive(False)
+        restart_btn.set_sensitive(False)
 
         def on_done(ok, error=None):
             if ok:
                 self._show_toast(f"{srv['name']} started successfully")
             else:
                 self._show_toast(f"Failed to start {srv['name']}: {error or 'unknown error'}")
-            self._fetch_status(vm, srv, play_btn, stop_btn)
+            self._fetch_status(vm, srv, play_btn, stop_btn, restart_btn)
 
         runner.docker_action(
             ip=vm["ip"],
@@ -174,16 +205,17 @@ class DashboardPage(Gtk.Box):
             done_callback=on_done,
         )
 
-    def _on_stop(self, _btn, srv, vm, play_btn, stop_btn):
+    def _on_stop(self, _btn, srv, vm, play_btn, stop_btn, restart_btn):
         play_btn.set_sensitive(False)
         stop_btn.set_sensitive(False)
+        restart_btn.set_sensitive(False)
 
         def on_done(ok, error=None):
             if ok:
                 self._show_toast(f"{srv['name']} stopped successfully")
             else:
                 self._show_toast(f"Failed to stop {srv['name']}: {error or 'unknown error'}")
-            self._fetch_status(vm, srv, play_btn, stop_btn)
+            self._fetch_status(vm, srv, play_btn, stop_btn, restart_btn)
 
         runner.docker_action(
             ip=vm["ip"],
@@ -192,6 +224,28 @@ class DashboardPage(Gtk.Box):
             admin_password=vm["admin_password"],
             container=srv["name"],
             action="stop",
+            done_callback=on_done,
+        )
+
+    def _on_restart(self, _btn, srv, vm, play_btn, stop_btn, restart_btn):
+        play_btn.set_sensitive(False)
+        stop_btn.set_sensitive(False)
+        restart_btn.set_sensitive(False)
+
+        def on_done(ok, error=None):
+            if ok:
+                self._show_toast(f"{srv['name']} restarted successfully")
+            else:
+                self._show_toast(f"Failed to restart {srv['name']}: {error or 'unknown error'}")
+            self._fetch_status(vm, srv, play_btn, stop_btn, restart_btn)
+
+        runner.docker_action(
+            ip=vm["ip"],
+            ssh_user=vm["ssh_user"],
+            ssh_key=vm["ssh_key"],
+            admin_password=vm["admin_password"],
+            container=srv["name"],
+            action="restart",
             done_callback=on_done,
         )
 
@@ -249,6 +303,64 @@ class DashboardPage(Gtk.Box):
 
         dialog.connect("closed", lambda _: cancel())
         dialog.present(self)
+
+    # ── Public IP ─────────────────────────────────────────────────────────────
+
+    def _on_get_public_ip(self, _btn, vm, btn):
+        btn.set_sensitive(False)
+        def on_done(public_ip):
+            btn.set_sensitive(True)
+            if public_ip:
+                toast = Adw.Toast(title=f"Public IP: {public_ip}")
+                toast.set_timeout(0)
+                toast.set_button_label("Copy")
+                toast.connect("button-clicked", lambda t: self.get_clipboard().set(public_ip))
+                self._toast_overlay.add_toast(toast)
+            else:
+                self._show_toast("Could not retrieve public IP — check SSH access and that curl is installed.")
+        runner.get_public_ip(
+            ip=vm["ip"],
+            ssh_user=vm["ssh_user"],
+            ssh_key=vm["ssh_key"],
+            done_callback=on_done,
+        )
+
+    # ── Terminal shortcuts ────────────────────────────────────────────────────
+
+    def _on_open_files(self, _btn, srv, vm):
+        import shlex
+        key = os.path.expanduser(vm["ssh_key"])
+        ssh_cmd = [
+            "ssh", "-i", key, "-t",
+            "-o", "StrictHostKeyChecking=no",
+            f"{vm['ssh_user']}@{vm['ip']}",
+            f"cd /opt/gameservers/{shlex.quote(srv['name'])} && bash",
+        ]
+        if not runner.open_terminal(ssh_cmd):
+            self._show_toast("No supported terminal emulator found.")
+
+    def _on_open_console(self, _btn, srv, vm):
+        import shlex
+        key = os.path.expanduser(vm["ssh_key"])
+        if srv["game_type"] == "minecraft":
+            remote_cmd = (
+                f"echo {shlex.quote(vm['admin_password'])} | sudo -S "
+                f"docker exec -it {shlex.quote(srv['name'])} rcon-cli"
+            )
+        else:  # vintagestory — show recent log history then attach for live I/O
+            remote_cmd = (
+                f"echo {shlex.quote(vm['admin_password'])} | sudo -S true 2>/dev/null && "
+                f"sudo docker logs --tail 100 {shlex.quote(srv['name'])} 2>&1; "
+                f"exec sudo docker attach {shlex.quote(srv['name'])}"
+            )
+        ssh_cmd = [
+            "ssh", "-i", key, "-t",
+            "-o", "StrictHostKeyChecking=no",
+            f"{vm['ssh_user']}@{vm['ip']}",
+            remote_cmd,
+        ]
+        if not runner.open_terminal(ssh_cmd):
+            self._show_toast("No supported terminal emulator found.")
 
     # ── Remove ────────────────────────────────────────────────────────────────
 

@@ -1,0 +1,51 @@
+---
+- name: Create Vintage Story server directories
+  file:
+    path: "/opt/gameservers/{{ server_name }}/{{ item }}"
+    state: directory
+    owner: "{{ admin_username }}"
+    group: "{{ admin_username }}"
+    mode: "0750"
+  loop:
+    - ""
+
+- name: Create Vintage Story data directory (world-writable for container user)
+  file:
+    path: "/opt/gameservers/{{ server_name }}/data"
+    state: directory
+    owner: "{{ admin_username }}"
+    group: "{{ admin_username }}"
+    mode: "0777"
+
+- name: Template Vintage Story server config
+  template:
+    src: vintagestory/serverconfig.json.j2
+    dest: "/opt/gameservers/{{ server_name }}/data/serverconfig.json"
+    owner: "{{ admin_username }}"
+    group: "{{ admin_username }}"
+    mode: "0666"
+
+- name: Template Vintage Story Docker Compose file
+  template:
+    src: vintagestory/docker-compose.yml.j2
+    dest: "/opt/gameservers/{{ server_name }}/docker-compose.yml"
+    owner: "{{ admin_username }}"
+    group: "{{ admin_username }}"
+    mode: "0640"
+
+- name: Open Vintage Story port in firewall (TCP)
+  ufw:
+    rule: allow
+    port: "{{ server_port | default(42420) }}"
+    proto: tcp
+
+- name: Open Vintage Story port in firewall (UDP)
+  ufw:
+    rule: allow
+    port: "{{ server_port | default(42420) }}"
+    proto: udp
+
+- name: Start Vintage Story server
+  community.docker.docker_compose_v2:
+    project_src: "/opt/gameservers/{{ server_name }}"
+    state: present

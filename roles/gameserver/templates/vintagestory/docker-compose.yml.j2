@@ -1,0 +1,29 @@
+services:
+  {{ server_name }}:
+    image: quartzar/vintage-story-server:latest
+    container_name: "{{ server_name }}"
+    restart: unless-stopped
+    stdin_open: true
+    tty: true
+    environment:
+      TZ: "UTC"
+      VERSION: "{{ vs_version | default('1.21.6') }}"
+    ports:
+      - "{{ server_port | default(42420) }}:{{ server_port | default(42420) }}"
+      - "{{ server_port | default(42420) }}:{{ server_port | default(42420) }}/udp"
+    volumes:
+      - ./data:/srv/gameserver/data/vs
+    labels:
+      game_type: vintagestory
+      server_name: "{{ server_name }}"
+    stop_grace_period: 60s
+    logging:
+      driver: grafana/loki-docker-driver
+      options:
+        loki-url: "http://{{ monitoring_host_ip }}:{{ loki_port }}/loki/api/v1/push"
+        loki-external-labels: "job=gameserver,game_type=vintagestory,server_name={{ server_name }}"
+        loki-retries: "1"
+        loki-timeout: "2s"
+        no-file: "false"
+        mode: "non-blocking"
+        max-buffer-size: "4m"

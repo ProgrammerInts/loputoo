@@ -1,0 +1,97 @@
+{
+    "FileEditWarning": "",
+    "ConfigVersion": "1.8",
+    "ServerName": "{{ vs_server_name | default(server_name) }}",
+    "ServerUrl": null,
+    "ServerDescription": null,
+    "WelcomeMessage": "Welcome {0}, may you survive well and prosper",
+    "Ip": null,
+    "Port": {{ server_port | default(42420) }},
+    "Upnp": false,
+    "CompressPackets": true,
+    "AdvertiseServer": false,
+    "MaxClients": {{ vs_max_clients | default(16) }},
+    "MaxClientsInQueue": 0,
+    "PassTimeWhenEmpty": false,
+    "Password": {% if vs_password | default('') != '' %}"{{ vs_password }}"{% else %}null{% endif %},
+    "ServerLanguage": "en",
+    "MaxChunkRadius": 12,
+    "OnlyWhitelisted": false,
+    "AllowPvP": true,
+    "AllowFireSpread": true,
+    "AllowFallingBlocks": true,
+    "VerifyPlayerAuth": true,
+    "DefaultRoleCode": "suplayer",
+    "Roles": [
+        {
+            "Code": "suvisitor",
+            "PrivilegeLevel": -1,
+            "Name": "Survival Visitor",
+            "DefaultSpawn": null,
+            "ForcedSpawn": null,
+            "Privileges": ["chat"],
+            "RuntimePrivileges": [],
+            "DefaultGameMode": 1,
+            "Color": "Green",
+            "LandClaimAllowance": 0,
+            "LandClaimMinSize": { "X": 5, "Y": 5, "Z": 5 },
+            "LandClaimMaxAreas": 3,
+            "AutoGrant": false
+        },
+        {
+            "Code": "suplayer",
+            "PrivilegeLevel": 0,
+            "Name": "Survival Player",
+            "DefaultSpawn": null,
+            "ForcedSpawn": null,
+            "Privileges": [
+                "controlplayergroups", "manageplayergroups", "chat",
+                "areamodify", "build", "useblock",
+                "attackcreatures", "attackplayers", "selfkill"
+            ],
+            "RuntimePrivileges": [],
+            "DefaultGameMode": 1,
+            "Color": "White",
+            "LandClaimAllowance": 262144,
+            "LandClaimMinSize": { "X": 5, "Y": 5, "Z": 5 },
+            "LandClaimMaxAreas": 3,
+            "AutoGrant": true
+        },
+        {
+            "Code": "admin",
+            "PrivilegeLevel": 99999,
+            "Name": "Admin",
+            "DefaultSpawn": null,
+            "ForcedSpawn": null,
+            "Privileges": [
+                "build", "useblock", "buildblockseverywhere", "useblockseverywhere",
+                "attackplayers", "attackcreatures", "freemove", "gamemode", "pickingrange",
+                "chat", "kick", "ban", "whitelist", "setwelcome", "announce", "readlists",
+                "give", "areamodify", "setspawn", "controlserver", "tp", "time",
+                "grantrevoke", "root", "commandplayer",
+                "controlplayergroups", "manageplayergroups", "selfkill"
+            ],
+            "RuntimePrivileges": [],
+            "DefaultGameMode": 1,
+            "Color": "LightBlue",
+            "LandClaimAllowance": 2147483647,
+            "LandClaimMinSize": { "X": 5, "Y": 5, "Z": 5 },
+            "LandClaimMaxAreas": 99999,
+            "AutoGrant": false
+        }
+    ],
+    "WorldConfig": {
+        "Seed": null,
+        "WorldName": "{{ vs_world_name | default('Default') }}",
+        "AllowCreativeMode": true,
+        "PlayStyle": "surviveandbuild",
+        "WorldType": "standard",
+        "WorldConfiguration": {
+            "startingCalendarYear": "2",
+            "startingSeason": "{{ vs_starting_season | default('spring') }}"
+        }
+    },
+    "DieBelowDiskSpaceMb": 400,
+    "CorruptionProtection": true,
+    "ChatRateLimitMs": 1000
+}

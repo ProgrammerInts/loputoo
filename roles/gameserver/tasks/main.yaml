@@ -16,3 +16,7 @@
 - name: Deploy Valheim server
   include_tasks: valheim.yaml
   when: game_type == 'valheim'
+
+- name: Deploy Vintage Story server
+  include_tasks: vintagestory.yaml
+  when: game_type == 'vintagestory'

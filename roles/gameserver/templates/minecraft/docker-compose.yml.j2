@@ -1,12 +1,13 @@
 services:
   {{ server_name }}:
-    image: itzg/minecraft-server:latest
+    image: itzg/minecraft-server:{{ minecraft_java_version | default('java21') }}
     container_name: "{{ server_name }}"
     restart: unless-stopped
     environment:
       UID: "{{ admin_uid }}"
       GID: "{{ admin_gid }}"
       EULA: "TRUE"
+      TYPE: "{{ minecraft_type | default('VANILLA') }}"
       VERSION: "{{ minecraft_version | default('LATEST') }}"
       MEMORY: "{{ minecraft_memory | default('2G') }}"
       DIFFICULTY: "{{ minecraft_difficulty | default('normal') }}"
@@ -21,9 +22,6 @@ services:
       - "{{ server_port | default(25565) }}:25565"
     volumes:
       - ./data:/data
-      - ./mods:/data/mods
-      - ./plugins:/data/plugins
-      - ./world:/data/world
     labels:
       game_type: minecraft
       server_name: "{{ server_name }}"

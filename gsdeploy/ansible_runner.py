@@ -301,6 +301,97 @@ def stream_docker_logs(ip, ssh_user, ssh_key, admin_password, container, log_cal
     return cancel
 
 
+def transfer_files(local_path, ip, ssh_user, ssh_key, remote_dest,
+                   log_callback, done_callback):
+    """
+    Transfer a local file or directory to remote_dest on the VM using rsync over SSH.
+    Returns a cancel() function.
+    """
+    proc_ref = [None]
+
+    def _run():
+        key = os.path.expanduser(ssh_key)
+        # Ensure trailing slash on source dir so rsync copies contents, not the folder itself
+        src = local_path.rstrip("/") + "/" if os.path.isdir(local_path) else local_path
+        cmd = [
+            "rsync", "-avz", "--progress",
+            "-e", f"ssh -i {key} -o StrictHostKeyChecking=no -o BatchMode=yes",
+            src,
+            f"{ssh_user}@{ip}:{remote_dest}",
+        ]
+        try:
+            proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+            proc_ref[0] = proc
+            for line in proc.stdout:
+                GLib.idle_add(log_callback, line)
+            proc.wait()
+            GLib.idle_add(done_callback, proc.returncode == 0)
+        except Exception as e:
+            GLib.idle_add(log_callback, f"ERROR: {e}\n")
+            GLib.idle_add(done_callback, False)
+
+    threading.Thread(target=_run, daemon=True).start()
+
+    def cancel():
+        if proc_ref[0] and proc_ref[0].poll() is None:
+            proc_ref[0].kill()
+
+    return cancel
+
+
+def get_public_ip(ip, ssh_user, ssh_key, done_callback):
+    """
+    SSH into the VM and run `curl -s ifconfig.me` to get its public IP.
+    Calls done_callback(ip_string) on the main thread, or done_callback(None) on failure.
+    """
+    def _run():
+        key = os.path.expanduser(ssh_key)
+        cmd = [
+            "ssh", "-i", key,
+            "-o", "StrictHostKeyChecking=no",
+            "-o", "BatchMode=yes",
+            "-o", "ConnectTimeout=10",
+            f"{ssh_user}@{ip}",
+            "curl -s --max-time 10 ifconfig.me",
+        ]
+        try:
+            proc = subprocess.run(cmd, capture_output=True, text=True, timeout=20)
+            result = proc.stdout.strip() if proc.returncode == 0 and proc.stdout.strip() else None
+            GLib.idle_add(done_callback, result)
+        except Exception:
+            GLib.idle_add(done_callback, None)
+
+    threading.Thread(target=_run, daemon=True).start()
+
+
+def open_terminal(cmd_args):
+    """
+    Launch a terminal emulator running cmd_args.
+    Returns True if a supported terminal was found, False otherwise.
+    """
+    import shutil
+    import shlex
+
+    bash_cmd = " ".join(shlex.quote(a) for a in cmd_args) + "; exec bash"
+
+    terminals = [
+        ("gnome-terminal", ["gnome-terminal", "--", "bash", "-c", bash_cmd]),
+        ("xterm",          ["xterm", "-e", "bash", "-c", bash_cmd]),
+        ("konsole",        ["konsole", "-e", "bash", "-c", bash_cmd]),
+        ("xfce4-terminal", ["xfce4-terminal", "-e", f"bash -c {shlex.quote(bash_cmd)}"]),
+        ("alacritty",      ["alacritty", "-e", "bash", "-c", bash_cmd]),
+        ("kitty",          ["kitty", "bash", "-c", bash_cmd]),
+        ("tilix",          ["tilix", "-e", "bash", "-c", bash_cmd]),
+        ("wezterm",        ["wezterm", "start", "--", "bash", "-c", bash_cmd]),
+    ]
+
+    for name, launch_cmd in terminals:
+        if shutil.which(name):
+            subprocess.Popen(launch_cmd)
+            return True
+    return False
+
+
 def run_deploy_monitoring(vm_name, become_pass, log_callback, done_callback):
     """
     Run deploy_monitoring.yml in a background thread, targeting vm_name.

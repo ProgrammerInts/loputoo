@@ -8,9 +8,10 @@
     mode: "0750"
   loop:
     - ""
-    - mods
-    - plugins
-    - world
+    - data
+    - data/mods
+    - data/plugins
+    - data/world
 
 - name: Template Minecraft Docker Compose file
   template:

@@ -42,6 +42,52 @@ STEPS = [
     ),
 ]
 
+MODIFICATIONS_STEPS = [
+    (
+        "How file transfer works",
+        "folder-symbolic",
+        "The Modifications tab transfers files from a local folder on your machine to the game server "
+        "using rsync over SSH.\n\n"
+        "Only the contents of your selected folder are copied — the folder itself is not. "
+        "For example, if you select a folder containing mod1.jar and mod2.jar, those two files "
+        "will be placed directly into the server's mods directory.\n\n"
+        "Consolidate all mods you want to deploy into a single local folder before transferring.",
+    ),
+    (
+        "After transferring files",
+        "view-refresh-symbolic",
+        "Changes do not take effect until the server is restarted. "
+        "After a successful transfer, go to the Dashboard and use the Restart button on the server.\n\n"
+        "Transferred files are additive — existing files on the server are not deleted. "
+        "To remove a mod, connect via the Files button on the Dashboard and delete it manually.",
+    ),
+    (
+        "World-generation mods",
+        "dialog-warning-symbolic",
+        "Mods that change world generation (new biomes, dimensions, structures) only affect "
+        "chunks that have not yet been generated.\n\n"
+        "If the world already exists, previously generated chunks will not change. "
+        "To get a fully modded world you will need to delete the existing world files and "
+        "let the server regenerate the world on next start.\n\n"
+        "Always make a backup before deleting world files. Game servers may handle this differently — "
+        "make sure you know what you are doing before proceeding.",
+    ),
+    (
+        "Destination folders by game",
+        "preferences-system-symbolic",
+        "Each game type maps to different server directories:\n\n"
+        "Minecraft\n"
+        "• Mods → data/mods (Forge, Fabric, NeoForge, Quilt)\n"
+        "• Plugins → data/plugins (Paper, Spigot)\n"
+        "• World → data/world\n\n"
+        "Vintage Story\n"
+        "• Mods → data/Mods\n"
+        "• World → data/Saves\n\n"
+        "Valheim\n"
+        "• World → config/worlds_local",
+    ),
+]
+
 NETWORK_NOTE = (
     "Network Access",
     "network-transmit-receive-symbolic",
@@ -95,6 +141,24 @@ class GuidePage(Gtk.ScrolledWindow):
 
             steps_group.add(row)
         content.append(steps_group)
+
+        # Modifications section
+        mods_group = Adw.PreferencesGroup(title="Modifications")
+        for title, icon, body in MODIFICATIONS_STEPS:
+            row = Adw.ExpanderRow(title=title)
+            row.add_prefix(Gtk.Image.new_from_icon_name(icon))
+
+            label = Gtk.Label(label=body)
+            label.set_wrap(True)
+            label.set_xalign(0)
+            label.set_margin_top(8)
+            label.set_margin_bottom(8)
+            label.set_margin_start(8)
+            label.set_margin_end(8)
+            row.add_row(label)
+
+            mods_group.add(row)
+        content.append(mods_group)
 
         # Network note
         net_title, net_icon, net_body = NETWORK_NOTE

@@ -8,8 +8,9 @@ import gsdeploy.ansible_runner as runner
 
 
 GAMES = [
-    ("Minecraft", "minecraft", "applications-games-symbolic"),
-    ("Valheim",   "valheim",   "applications-games-symbolic"),
+    ("Minecraft",     "minecraft",     "applications-games-symbolic"),
+    ("Valheim",       "valheim",       "applications-games-symbolic"),
+    ("Vintage Story", "vintagestory",  "applications-games-symbolic"),
 ]
 
 
@@ -203,7 +204,24 @@ class DeployWizardPage(Gtk.Box):
 
         if self._selected_game == "minecraft":
             self._port_row.set_text("25565")
-            self._mc_version_row   = Adw.EntryRow(title="Version")
+
+            # Server type dropdown
+            MC_TYPES = ["VANILLA", "FORGE", "NEOFORGE", "FABRIC", "PAPER", "SPIGOT", "QUILT"]
+            self._mc_type_row = Adw.ComboRow(title="Server Type")
+            type_model = Gtk.StringList()
+            for t in MC_TYPES:
+                type_model.append(t)
+            self._mc_type_row.set_model(type_model)  # defaults to index 0 = VANILLA
+
+            # Java version dropdown
+            MC_JAVA = ["java21", "java17", "java8", "java25"]
+            self._mc_java_row = Adw.ComboRow(title="Java Version")
+            java_model = Gtk.StringList()
+            for j in MC_JAVA:
+                java_model.append(j + (" (LTS, recommended)" if j == "java21" else ""))
+            self._mc_java_row.set_model(java_model)  # defaults to index 0 = java21
+
+            self._mc_version_row   = Adw.EntryRow(title="Minecraft Version")
             self._mc_memory_row    = Adw.EntryRow(title="Memory")
             self._mc_mode_row      = Adw.EntryRow(title="Game Mode")
             self._mc_difficulty_row= Adw.EntryRow(title="Difficulty")
@@ -213,7 +231,7 @@ class DeployWizardPage(Gtk.Box):
             self._mc_mode_row.set_text("survival")
             self._mc_difficulty_row.set_text("normal")
             self._mc_max_players_row.set_text("20")
-            for row in [self._mc_version_row, self._mc_memory_row,
+            for row in [self._mc_type_row, self._mc_java_row, self._mc_version_row, self._mc_memory_row,
                         self._mc_mode_row, self._mc_difficulty_row,
                         self._mc_max_players_row]:
                 group.add(row)
@@ -225,6 +243,19 @@ class DeployWizardPage(Gtk.Box):
             self._vh_world_row.set_text("Dedicated")
             group.add(self._vh_world_row)
             group.add(self._vh_pass_row)
+
+        elif self._selected_game == "vintagestory":
+            self._port_row.set_text("42420")
+            self._vs_version_row     = Adw.EntryRow(title="Version")
+            self._vs_world_row       = Adw.EntryRow(title="World Name")
+            self._vs_max_players_row = Adw.EntryRow(title="Max Players")
+            self._vs_pass_row        = Adw.PasswordEntryRow(title="Server Password (optional)")
+            self._vs_version_row.set_text("1.21.6")
+            self._vs_world_row.set_text("Default")
+            self._vs_max_players_row.set_text("16")
+            for row in [self._vs_version_row, self._vs_world_row,
+                        self._vs_max_players_row, self._vs_pass_row]:
+                group.add(row)
 
         self._configure_group_box.append(group)
 
@@ -415,7 +446,11 @@ class DeployWizardPage(Gtk.Box):
 
         extra_vars = {}
         if game == "minecraft":
-            extra_vars["minecraft_version"]   = self._mc_version_row.get_text().strip()
+            MC_TYPES = ["VANILLA", "FORGE", "NEOFORGE", "FABRIC", "PAPER", "SPIGOT", "QUILT"]
+            MC_JAVA  = ["java21", "java17", "java8", "java25"]
+            extra_vars["minecraft_type"]         = MC_TYPES[self._mc_type_row.get_selected()]
+            extra_vars["minecraft_java_version"] = MC_JAVA[self._mc_java_row.get_selected()]
+            extra_vars["minecraft_version"]    = self._mc_version_row.get_text().strip()
             extra_vars["minecraft_memory"]     = self._mc_memory_row.get_text().strip()
             extra_vars["minecraft_mode"]       = self._mc_mode_row.get_text().strip()
             extra_vars["minecraft_difficulty"] = self._mc_difficulty_row.get_text().strip()
@@ -423,10 +458,17 @@ class DeployWizardPage(Gtk.Box):
         elif game == "valheim":
             extra_vars["valheim_world_name"]   = self._vh_world_row.get_text().strip()
             extra_vars["valheim_server_pass"]  = self._vh_pass_row.get_text()
+        elif game == "vintagestory":
+            extra_vars["vs_version"]           = self._vs_version_row.get_text().strip()
+            extra_vars["vs_world_name"]        = self._vs_world_row.get_text().strip()
+            extra_vars["vs_max_clients"]       = self._vs_max_players_row.get_text().strip()
+            extra_vars["vs_password"]          = self._vs_pass_row.get_text()
 
         version = ""
         if game == "minecraft":
             version = self._mc_version_row.get_text().strip()
+        elif game == "vintagestory":
+            version = self._vs_version_row.get_text().strip()
 
         self._pending_deploy = {"vm_id": vm["id"], "name": server_name,
                                 "game_type": game, "port": port, "version": version}

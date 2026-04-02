@@ -7,6 +7,7 @@ from gsdeploy.pages.guide import GuidePage
 from gsdeploy.pages.dashboard import DashboardPage
 from gsdeploy.pages.vm_manager import VMManagerPage
 from gsdeploy.pages.deploy_wizard import DeployWizardPage
+from gsdeploy.pages.mods_maps import ModsMapsPage
 from gsdeploy.pages.monitoring import MonitoringPage
 
 
@@ -15,6 +16,7 @@ NAV_ITEMS = [
     ("Dashboard",        "org.gnome.SystemMonitor-symbolic",  DashboardPage),
     ("Virtual Machines", "computer-symbolic",                VMManagerPage),
     ("Deploy Server",    "system-run-symbolic",              DeployWizardPage),
+    ("Modifications",    "folder-symbolic",                  ModsMapsPage),
     ("Monitoring",       "utilities-system-monitor-symbolic", MonitoringPage),
 ]
 
@@ -24,6 +26,7 @@ class GsDeployWindow(Adw.ApplicationWindow):
         super().__init__(**kwargs)
         self.set_title("GSDeploy")
         self.set_default_size(960, 680)
+        self.set_size_request(360, 240)
 
         self._pages = {}
         self._build_ui()
@@ -61,7 +64,13 @@ class GsDeployWindow(Adw.ApplicationWindow):
 
         self.stack = Gtk.Stack()
         self.stack.set_transition_type(Gtk.StackTransitionType.CROSSFADE)
-        self.content_box.append(self.stack)
+        self.stack.set_vexpand(True)
+
+        stack_scroll = Gtk.ScrolledWindow()
+        stack_scroll.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
+        stack_scroll.set_vexpand(True)
+        stack_scroll.set_child(self.stack)
+        self.content_box.append(stack_scroll)
 
         for i, (label, _, PageClass) in enumerate(NAV_ITEMS):
             page = PageClass()
