@@ -20,3 +20,7 @@
 - name: Deploy Vintage Story server
   include_tasks: vintagestory.yaml
   when: game_type == 'vintagestory'
+
+- name: Deploy Factorio server
+  include_tasks: factorio.yaml
+  when: game_type == 'factorio'

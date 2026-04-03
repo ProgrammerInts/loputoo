@@ -21,6 +21,10 @@ DESTINATIONS = {
         "Mods":  "data/Mods",
         "World": "data/Saves",
     },
+    "factorio": {
+        "Mods":  "data/mods",
+        "Saves": "data/saves",
+    },
 }
 
 

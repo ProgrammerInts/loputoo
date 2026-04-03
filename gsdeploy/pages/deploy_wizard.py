@@ -11,6 +11,7 @@ GAMES = [
     ("Minecraft",     "minecraft",     "applications-games-symbolic"),
     ("Valheim",       "valheim",       "applications-games-symbolic"),
     ("Vintage Story", "vintagestory",  "applications-games-symbolic"),
+    ("Factorio",      "factorio",      "applications-games-symbolic"),
 ]
 
 
@@ -33,16 +34,23 @@ class DeployWizardPage(Gtk.Box):
         self.carousel.set_allow_mouse_drag(False)
         self.carousel.set_vexpand(True)
 
-        self.carousel.append(self._build_step_vm())
-        self.carousel.append(self._build_step_game())
-        self.carousel.append(self._build_step_configure())
+        def _scrolled(step):
+            scroll = Gtk.ScrolledWindow()
+            scroll.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
+            scroll.set_vexpand(True)
+            scroll.set_child(step)
+            return scroll
+
+        self.carousel.append(_scrolled(self._build_step_vm()))
+        self.carousel.append(_scrolled(self._build_step_game()))
+        self.carousel.append(_scrolled(self._build_step_configure()))
         self.carousel.append(self._build_step_deploy())
 
         dots = Adw.CarouselIndicatorDots()
         dots.set_carousel(self.carousel)
         dots.set_margin_top(8)
 
-        # Navigation buttons
+        # Navigation buttons — pinned to bottom via ToolbarView
         nav = Gtk.Box(spacing=8)
         nav.set_halign(Gtk.Align.CENTER)
         nav.set_margin_top(8)
@@ -65,9 +73,18 @@ class DeployWizardPage(Gtk.Box):
         nav.append(self.next_btn)
         nav.append(self.interrupt_btn)
 
-        self.append(dots)
-        self.append(self.carousel)
-        self.append(nav)
+        carousel_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
+        carousel_box.set_vexpand(True)
+        carousel_box.append(dots)
+        carousel_box.append(self.carousel)
+
+        toolbar_view = Adw.ToolbarView()
+        toolbar_view.set_content(carousel_box)
+        toolbar_view.add_bottom_bar(nav)
+        toolbar_view.set_extend_content_to_bottom_edge(True)
+        toolbar_view.set_vexpand(True)
+
+        self.append(toolbar_view)
 
         self.carousel.connect("page-changed", self._on_page_changed)
 
@@ -75,8 +92,10 @@ class DeployWizardPage(Gtk.Box):
 
     def _build_step_vm(self):
         self._vm_step_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=16)
+        self._vm_step_box.set_halign(Gtk.Align.CENTER)
+        self._vm_step_box.set_size_request(520, -1)
         self._vm_step_box.set_margin_top(24)
-        self._vm_step_box.set_margin_bottom(8)
+        self._vm_step_box.set_margin_bottom(72)
         self._vm_step_box.set_margin_start(24)
         self._vm_step_box.set_margin_end(24)
 
@@ -130,8 +149,10 @@ class DeployWizardPage(Gtk.Box):
 
     def _build_step_game(self):
         box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=16)
+        box.set_halign(Gtk.Align.CENTER)
+        box.set_size_request(520, -1)
         box.set_margin_top(24)
-        box.set_margin_bottom(8)
+        box.set_margin_bottom(72)
         box.set_margin_start(24)
         box.set_margin_end(24)
 
@@ -173,8 +194,10 @@ class DeployWizardPage(Gtk.Box):
 
     def _build_step_configure(self):
         self._configure_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=16)
+        self._configure_box.set_halign(Gtk.Align.CENTER)
+        self._configure_box.set_size_request(520, -1)
         self._configure_box.set_margin_top(24)
-        self._configure_box.set_margin_bottom(8)
+        self._configure_box.set_margin_bottom(72)
         self._configure_box.set_margin_start(24)
         self._configure_box.set_margin_end(24)
 
@@ -182,6 +205,37 @@ class DeployWizardPage(Gtk.Box):
         self._configure_title.set_css_classes(["title-2"])
         self._configure_title.set_halign(Gtk.Align.START)
         self._configure_box.append(self._configure_title)
+
+        note_label = Gtk.Label()
+        note_label.set_markup(
+            "Server Name is used as the Docker container name and must be <b>unique across all VMs</b>. "
+            "Use only letters, numbers, and hyphens (e.g. <tt>mc-survival</tt>, <tt>factorio1</tt>)."
+        )
+        note_label.set_wrap(True)
+        note_label.set_xalign(0)
+        note_label.set_css_classes(["dim-label"])
+        note_label.set_margin_top(10)
+        note_label.set_margin_end(12)
+        note_label.set_margin_bottom(10)
+
+        note_icon = Gtk.Image.new_from_icon_name("dialog-information-symbolic")
+        note_icon.set_valign(Gtk.Align.START)
+        note_icon.set_margin_top(12)
+        note_icon.set_margin_start(12)
+        note_icon.set_margin_end(4)
+        note_icon.set_margin_bottom(10)
+
+        note_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+        note_box.set_css_classes(["card"])
+
+        note_box.append(note_icon)
+        note_box.append(note_label)
+
+        expander = Gtk.Expander(label="Note: Server Name")
+        expander.set_expanded(True)
+        expander.set_child(note_box)
+        expander.set_margin_bottom(4)
+        self._configure_box.append(expander)
 
         self._configure_group_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
         self._configure_box.append(self._configure_group_box)
@@ -257,12 +311,26 @@ class DeployWizardPage(Gtk.Box):
                         self._vs_max_players_row, self._vs_pass_row]:
                 group.add(row)
 
+        elif self._selected_game == "factorio":
+            self._port_row.set_text("34197")
+            self._fac_version_row     = Adw.EntryRow(title="Version")
+            self._fac_save_row        = Adw.EntryRow(title="Save Name")
+            self._fac_desc_row        = Adw.EntryRow(title="Description (optional)")
+            self._fac_max_players_row = Adw.EntryRow(title="Max Players (0 = unlimited)")
+            self._fac_pass_row        = Adw.PasswordEntryRow(title="Server Password (optional)")
+            self._fac_version_row.set_text("stable")
+            self._fac_max_players_row.set_text("0")
+            for row in [self._fac_version_row, self._fac_save_row, self._fac_desc_row,
+                        self._fac_max_players_row, self._fac_pass_row]:
+                group.add(row)
+
         self._configure_group_box.append(group)
 
     # ── Step 4: Deploy ───────────────────────────────────────────────────────
 
     def _build_step_deploy(self):
         box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=16)
+        box.set_hexpand(True)
         box.set_margin_top(24)
         box.set_margin_bottom(8)
         box.set_margin_start(24)
@@ -463,12 +531,20 @@ class DeployWizardPage(Gtk.Box):
             extra_vars["vs_world_name"]        = self._vs_world_row.get_text().strip()
             extra_vars["vs_max_clients"]       = self._vs_max_players_row.get_text().strip()
             extra_vars["vs_password"]          = self._vs_pass_row.get_text()
+        elif game == "factorio":
+            extra_vars["factorio_version"]     = self._fac_version_row.get_text().strip()
+            extra_vars["factorio_save_name"]   = self._fac_save_row.get_text().strip() or server_name
+            extra_vars["factorio_description"] = self._fac_desc_row.get_text().strip()
+            extra_vars["factorio_max_players"] = self._fac_max_players_row.get_text().strip()
+            extra_vars["factorio_password"]    = self._fac_pass_row.get_text()
 
         version = ""
         if game == "minecraft":
             version = self._mc_version_row.get_text().strip()
         elif game == "vintagestory":
             version = self._vs_version_row.get_text().strip()
+        elif game == "factorio":
+            version = self._fac_version_row.get_text().strip()
 
         self._pending_deploy = {"vm_id": vm["id"], "name": server_name,
                                 "game_type": game, "port": port, "version": version}

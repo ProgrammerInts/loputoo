@@ -1,0 +1,27 @@
+services:
+  {{ server_name }}:
+    image: factoriotools/factorio:{{ factorio_version | default('stable') }}
+    container_name: "{{ server_name }}"
+    restart: unless-stopped
+    environment:
+      GENERATE_NEW_SAVE: "true"
+      SAVE_NAME: "{{ factorio_save_name | default(server_name) }}"
+      PORT: "{{ server_port | default(34197) }}"
+    ports:
+      - "{{ server_port | default(34197) }}:{{ server_port | default(34197) }}/udp"
+    volumes:
+      - ./data:/factorio
+    labels:
+      game_type: factorio
+      server_name: "{{ server_name }}"
+    stop_grace_period: 30s
+    logging:
+      driver: grafana/loki-docker-driver
+      options:
+        loki-url: "http://{{ monitoring_host_ip }}:{{ loki_port }}/loki/api/v1/push"
+        loki-external-labels: "job=gameserver,game_type=factorio,server_name={{ server_name }}"
+        loki-retries: "1"
+        loki-timeout: "2s"
+        no-file: "false"
+        mode: "non-blocking"
+        max-buffer-size: "4m"

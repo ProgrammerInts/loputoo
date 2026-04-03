@@ -9,8 +9,10 @@ import gsdeploy.ansible_runner as runner
 
 
 GAME_ICONS = {
-    "minecraft": "applications-games-symbolic",
-    "valheim":   "applications-games-symbolic",
+    "minecraft":    "applications-games-symbolic",
+    "valheim":      "applications-games-symbolic",
+    "vintagestory": "applications-games-symbolic",
+    "factorio":     "applications-games-symbolic",
 }
 
 
@@ -344,8 +346,8 @@ class DashboardPage(Gtk.Box):
         key = os.path.expanduser(vm["ssh_key"])
         if srv["game_type"] == "minecraft":
             remote_cmd = (
-                f"echo {shlex.quote(vm['admin_password'])} | sudo -S "
-                f"docker exec -it {shlex.quote(srv['name'])} rcon-cli"
+                f"echo {shlex.quote(vm['admin_password'])} | sudo -S true 2>/dev/null && "
+                f"sudo docker exec -it {shlex.quote(srv['name'])} rcon-cli"
             )
         else:  # vintagestory — show recent log history then attach for live I/O
             remote_cmd = (

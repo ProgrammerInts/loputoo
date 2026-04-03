@@ -1,0 +1,37 @@
+---
+- name: Create Factorio server directories
+  file:
+    path: "/opt/gameservers/{{ server_name }}/{{ item.path }}"
+    state: directory
+    mode: "{{ item.mode }}"
+    owner: "{{ admin_username }}"
+    group: "{{ admin_username }}"
+  loop:
+    - { path: "",         mode: "0750" }
+    - { path: "data",     mode: "0777" }
+    - { path: "data/config", mode: "0777" }
+
+- name: Template Factorio Docker Compose file
+  template:
+    src: factorio/docker-compose.yml.j2
+    dest: "/opt/gameservers/{{ server_name }}/docker-compose.yml"
+    owner: "{{ admin_username }}"
+    group: "{{ admin_username }}"
+    mode: "0640"
+
+- name: Template Factorio server settings
+  template:
+    src: factorio/server-settings.json.j2
+    dest: "/opt/gameservers/{{ server_name }}/data/config/server-settings.json"
+    mode: "0666"
+
+- name: Open Factorio UDP port in firewall
+  ufw:
+    rule: allow
+    port: "{{ server_port }}"
+    proto: udp
+
+- name: Start Factorio server
+  community.docker.docker_compose_v2:
+    project_src: "/opt/gameservers/{{ server_name }}"
+    state: present
