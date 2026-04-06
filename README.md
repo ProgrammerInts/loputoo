@@ -20,9 +20,12 @@ It provides a simple GUI for managing infrastructure and deploying game servers 
 
 ### Control Machine (your computer)
 
-- Ubuntu 22.04 or Debian 12
+- Ubuntu 24.04 LTS or newer (libadwaita 1.4+ required)
 - Python 3.10+
 - SSH access to target VMs
+
+> **Note:** Ubuntu 22.04 and 23.04 ship with libadwaita older than 1.4 and are not supported.
+> WSL2 is not recommended — GTK4 GUI support is limited.
 
 ### Target VM
 

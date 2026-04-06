@@ -364,6 +364,30 @@ def get_public_ip(ip, ssh_user, ssh_key, done_callback):
     threading.Thread(target=_run, daemon=True).start()
 
 
+def check_connection(ip, ssh_user, ssh_key, done_callback):
+    """
+    Test SSH connectivity to a VM.
+    Calls done_callback(True) on success, done_callback(False) on failure.
+    """
+    def _run():
+        key = os.path.expanduser(ssh_key)
+        cmd = [
+            "ssh", "-i", key,
+            "-o", "StrictHostKeyChecking=no",
+            "-o", "BatchMode=yes",
+            "-o", "ConnectTimeout=5",
+            f"{ssh_user}@{ip}",
+            "exit",
+        ]
+        try:
+            proc = subprocess.run(cmd, capture_output=True, timeout=10)
+            GLib.idle_add(done_callback, proc.returncode == 0)
+        except Exception:
+            GLib.idle_add(done_callback, False)
+
+    threading.Thread(target=_run, daemon=True).start()
+
+
 def open_terminal(cmd_args):
     """
     Launch a terminal emulator running cmd_args.

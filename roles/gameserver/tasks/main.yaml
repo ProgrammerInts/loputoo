@@ -1,4 +1,12 @@
 ---
+- name: Ensure /opt/gameservers exists with restricted permissions
+  file:
+    path: /opt/gameservers
+    state: directory
+    owner: root
+    group: "{{ admin_username }}"
+    mode: "0750"
+
 - name: Look up admin user UID/GID
   ansible.builtin.getent:
     database: passwd

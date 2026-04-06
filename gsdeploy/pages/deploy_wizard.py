@@ -332,7 +332,7 @@ class DeployWizardPage(Gtk.Box):
         box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=16)
         box.set_hexpand(True)
         box.set_margin_top(24)
-        box.set_margin_bottom(8)
+        box.set_margin_bottom(72)
         box.set_margin_start(24)
         box.set_margin_end(24)
 

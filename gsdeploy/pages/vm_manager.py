@@ -10,10 +10,17 @@ import gsdeploy.ansible_runner as runner
 class VMManagerPage(Gtk.Box):
     def __init__(self):
         super().__init__(orientation=Gtk.Orientation.VERTICAL, spacing=0)
-        self.set_margin_top(24)
-        self.set_margin_bottom(24)
-        self.set_margin_start(24)
-        self.set_margin_end(24)
+
+        self._toast_overlay = Adw.ToastOverlay()
+        self._toast_overlay.set_vexpand(True)
+
+        inner = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
+        inner.set_margin_top(24)
+        inner.set_margin_bottom(24)
+        inner.set_margin_start(24)
+        inner.set_margin_end(24)
+        self._toast_overlay.set_child(inner)
+        self.append(self._toast_overlay)
 
         # Toolbar
         toolbar = Gtk.Box(spacing=8)
@@ -23,17 +30,17 @@ class VMManagerPage(Gtk.Box):
         add_btn.set_css_classes(["suggested-action", "pill"])
         add_btn.connect("clicked", self._show_add_dialog)
         toolbar.append(add_btn)
-        self.append(toolbar)
+        inner.append(toolbar)
 
         # Container for groups (rebuilt on refresh)
         self.group_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=16)
-        self.append(self.group_box)
+        inner.append(self.group_box)
 
         # Empty state
         self.empty_label = Gtk.Label(label="No VMs added yet. Click \"Add VM\" to get started.")
         self.empty_label.set_css_classes(["dim-label"])
         self.empty_label.set_margin_top(24)
-        self.append(self.empty_label)
+        inner.append(self.empty_label)
 
         self._refresh()
 
@@ -70,6 +77,13 @@ class VMManagerPage(Gtk.Box):
         row = Adw.ActionRow(title=vm["name"], subtitle=f"{vm['ssh_user']}@{vm['ip']}")
         row.add_prefix(Gtk.Image.new_from_icon_name(icon))
 
+        check_btn = Gtk.Button(icon_name="network-transmit-receive-symbolic")
+        check_btn.set_css_classes(["flat"])
+        check_btn.set_valign(Gtk.Align.CENTER)
+        check_btn.set_tooltip_text("Check connection")
+        check_btn.connect("clicked", self._on_check_connection, dict(vm), check_btn)
+        row.add_suffix(check_btn)
+
         provision_btn = Gtk.Button(icon_name="system-run-symbolic")
         provision_btn.set_css_classes(["flat"])
         provision_btn.set_valign(Gtk.Align.CENTER)
@@ -99,6 +113,31 @@ class VMManagerPage(Gtk.Box):
         row.add_suffix(remove_btn)
 
         group.add(row)
+
+    def _show_toast(self, message):
+        toast = Adw.Toast(title=message)
+        toast.set_timeout(4)
+        self._toast_overlay.add_toast(toast)
+
+    def _on_check_connection(self, _btn, vm, btn):
+        btn.set_sensitive(False)
+        btn.set_icon_name("content-loading-symbolic")
+
+        def on_done(ok):
+            btn.set_sensitive(True)
+            if ok:
+                btn.set_icon_name("emblem-ok-symbolic")
+                self._show_toast(f"{vm['name']} is reachable via SSH")
+            else:
+                btn.set_icon_name("dialog-error-symbolic")
+                self._show_toast(f"{vm['name']} is not reachable — check IP, SSH key, and that the VM is online")
+
+        runner.check_connection(
+            ip=vm["ip"],
+            ssh_user=vm["ssh_user"],
+            ssh_key=vm["ssh_key"],
+            done_callback=on_done,
+        )
 
     def _warn_if_not_provisioned(self, vm, on_proceed):
         if vm["ssh_user"] == vm["initial_user"]:
