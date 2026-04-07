@@ -1,5 +1,6 @@
 import gi
 import os
+import json
 gi.require_version("Gtk", "4.0")
 gi.require_version("Adw", "1")
 from gi.repository import Adw, Gtk
@@ -142,6 +143,13 @@ class DashboardPage(Gtk.Box):
                     console_btn.set_tooltip_text("Open server console")
                     console_btn.connect("clicked", self._on_open_console, dict(srv), dict(vm))
                     row.add_suffix(console_btn)
+
+                info_btn = Gtk.Button(icon_name="dialog-information-symbolic")
+                info_btn.set_css_classes(["flat"])
+                info_btn.set_valign(Gtk.Align.CENTER)
+                info_btn.set_tooltip_text("Deployment configuration")
+                info_btn.connect("clicked", self._on_show_config, dict(srv))
+                row.add_suffix(info_btn)
 
                 remove_btn = Gtk.Button(icon_name="user-trash-symbolic")
                 remove_btn.set_css_classes(["flat", "destructive-action"])
@@ -365,6 +373,53 @@ class DashboardPage(Gtk.Box):
             self._show_toast("No supported terminal emulator found.")
 
     # ── Remove ────────────────────────────────────────────────────────────────
+
+    def _on_show_config(self, _btn, srv):
+        config = json.loads(srv.get("config") or "{}")
+
+        dialog = Adw.Dialog(title=f"{srv['name']} — Deployment Config")
+        dialog.set_content_width(380)
+
+        toolbar_view = Adw.ToolbarView()
+        toolbar_view.add_top_bar(Adw.HeaderBar())
+
+        group = Adw.PreferencesGroup()
+        group.set_margin_top(16)
+        group.set_margin_bottom(16)
+        group.set_margin_start(16)
+        group.set_margin_end(16)
+
+        def add_row(title, value):
+            r = Adw.ActionRow(title=title)
+            r.set_subtitle(str(value) if value else "—")
+            group.add(r)
+
+        add_row("Game", srv["game_type"].capitalize())
+        add_row("Port", srv["port"])
+        if srv.get("version"):
+            add_row("Version", srv["version"])
+
+        LABELS = {
+            "minecraft_type":         "Server Type",
+            "minecraft_java_version": "Java Version",
+            "minecraft_memory":       "Memory",
+            "minecraft_mode":         "Game Mode",
+            "minecraft_difficulty":   "Difficulty",
+            "minecraft_max_players":  "Max Players",
+            "valheim_world_name":     "World Name",
+            "vs_world_name":          "World Name",
+            "vs_max_clients":         "Max Players",
+            "factorio_save_name":     "Save Name",
+            "factorio_description":   "Description",
+            "factorio_max_players":   "Max Players",
+        }
+        for key, label in LABELS.items():
+            if key in config and config[key]:
+                add_row(label, config[key])
+
+        toolbar_view.set_content(group)
+        dialog.set_child(toolbar_view)
+        dialog.present(self)
 
     def _on_remove(self, _btn, srv, vm):
         dialog = Adw.AlertDialog(

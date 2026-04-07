@@ -1,2 +1,5 @@
 .claude
 /host_vars/*
+/packaging/build/
+/packaging/gsdeploy*.deb
+/packaging/version

@@ -4,6 +4,29 @@ GSDeploy is a desktop application for deploying, and monitoring game servers on 
 
 It provides a simple GUI for managing infrastructure and deploying game servers without manual configuration.
 
+### How it works
+
+GSDeploy runs on **your computer** and connects to a remote VM over SSH. It configures the VM, deploys game servers as Docker containers, and sets up a monitoring stack — all without manual server configuration.
+
+```
+Your computer               Gameserver VM
+┌─────────────┐           ┌──────────────────┐
+│             │           │   Minecraft      │
+│  GSDeploy  ─┼──── SSH ─►│   Valheim        │
+│             │           │   ...            │
+└──────┬──────┘           └──────────────────┘
+       │
+       │                  Monitoring VM (optional)
+       │                  ┌──────────────────┐
+       └──── SSH ─────────►   Grafana        │
+                          │   Prometheus     │
+                          │   Loki           │
+                          └──────────────────┘
+```
+
+> **Tip:** Monitoring is optional. It can run on the same VM as your game servers, but a
+> **separate VM is recommended** so monitoring does not compete for resources with your games.
+
 ---
 
 ## Features
@@ -20,12 +43,20 @@ It provides a simple GUI for managing infrastructure and deploying game servers 
 
 ### Control Machine (your computer)
 
-- Ubuntu 24.04 LTS or newer (libadwaita 1.4+ required)
+- Ubuntu 24.04 LTS or newer
+- Linux Mint 22 or newer
 - Python 3.10+
 - SSH access to target VMs
 
-> **Note:** Ubuntu 22.04 and 23.04 ship with libadwaita older than 1.4 and are not supported.
-> WSL2 is not recommended — GTK4 GUI support is limited.
+> **Note:** Requires libadwaita 1.4+. Ubuntu 22.04/23.04 and Debian 12 ship older versions and are not supported.
+> WSL2 is not recommended — GTK4 GUI support is limited, but it is possible.
+
+> **Security recommendation:** Use a passphrase-protected SSH key to prevent unauthorized VM access
+> if your computer is compromised:
+> ```bash
+> ssh-keygen -p -f ~/.ssh/id_ed25519
+> ```
+> Use `ssh-agent` or your desktop keyring to cache the passphrase for the session.
 
 ### Target VM
 
@@ -54,38 +85,53 @@ It provides a simple GUI for managing infrastructure and deploying game servers 
 
 ```bash
 sudo apt update && sudo apt install -y \
-  ansible sshpass python3 python3-venv python3-gi \
+  git ansible sshpass python3 python3-venv python3-gi \
   gir1.2-gtk-4.0 gir1.2-adw-1
 ```
 
-### 2. Set up SSH key (if you don't have one)
+### 2. Clone the repository
+
+```bash
+git clone https://github.com/indrekis/loputoo.git
+cd loputoo
+```
+or download manually from Github in your browser
+
+### 3. Set up SSH key (if you don't have one)
+
+GSDeploy uses SSH key authentication to connect to your VMs. If you don't have a key yet:
 
 ```bash
 ssh-keygen -t ed25519
 ```
 
-### 3. Set up Python environment
+This creates a key pair at `~/.ssh/id_ed25519` (private) and `~/.ssh/id_ed25519.pub` (public).
+The public key is automatically copied to the VM during provisioning — you don't need to do anything manually.
+
+> See [This SSH key guide](https://www.ssh.com/academy/ssh/keygen) for more detail on key creation.
+
+### 4. Set up Python environment
 
 > **Important:** Modern Ubuntu/Debian enforce PEP 668, which blocks global `pip install`.
 > You must use a virtual environment. The `--system-site-packages` flag is required so
 > GTK bindings are accessible inside the venv.
 
 ```bash
-python3 -m venv venv --system-site-packages
-source venv/bin/activate
+python3 -m venv gsdeploy-venv --system-site-packages
+source gsdeploy-venv/bin/activate
 pip install passlib
 ```
 
-### 4. Install Ansible collections
+### 5. Install Ansible collections
 
 ```bash
 ansible-galaxy collection install -r requirements.txt
 ```
 
-### 5. Run GSDeploy
+### 6. Run GSDeploy
 
 ```bash
-source venv/bin/activate
+source gsdeploy-venv/bin/activate
 python3 -m gsdeploy.main
 ```
 
@@ -109,7 +155,10 @@ Click the provision button on the VM row. This connects to your existing VM via
 password-based SSH, creates the admin user, installs Docker and monitoring agents,
 then switches all future connections to use the admin user and your SSH key.
 
-### 3. Deploy Monitoring
+### 3. Deploy Monitoring (optional)
+
+Monitoring is optional. It can run on the same VM as your game servers, but a **separate VM
+is recommended** so monitoring does not consume resources from your games.
 
 Click **Deploy Monitoring** on the VM. Only needs to be done once per monitoring VM.
 
@@ -177,6 +226,32 @@ world/     — world files (Minecraft)
 | Blackbox Exporter | TCP port probing | 9115 |
 | mc-monitor | Minecraft server metrics | game port + 1000 |
 
+> **Security warning:** Prometheus (9090), Loki (3100), and the exporter ports have no
+> authentication. If your VM has a public IP, restrict these ports to your IP only using
+> the VM's firewall or cloud security group rules. Grafana (3000) is safe to expose as it
+> has login protection.
+
+---
+
+## Using VMs on a Different Network
+
+GSDeploy works with any IP address — local, VPN, or public. Enter the VM's reachable IP
+when adding it and SSH access is all that is needed for provisioning and deployment.
+
+**Cloud VPS / public IP**
+- SSH (port 22) must be open from your machine
+- Game ports must be open for players to connect (GSDeploy opens them in UFW on the VM,
+  but your cloud provider's firewall/security group also needs to allow them)
+- **Firewall the monitoring ports** (9090, 3100, 9100, 8080) — they have no authentication
+  and must not be publicly accessible
+
+**VMs behind NAT (different LAN / home router)**
+- Forward port 22 on the router to the VM for SSH access during provisioning/deployment
+- Forward the game port(s) for players to connect
+
+**VPN (e.g. Tailscale, WireGuard)**
+- Assign VMs a VPN IP and use that — no port forwarding needed, monitoring ports stay private
+
 ---
 
 ## Troubleshooting
@@ -188,9 +263,9 @@ Do not use `pip install` globally. Use the venv setup above.
 GTK bindings are missing or the venv was created without `--system-site-packages`:
 ```bash
 sudo apt install python3-gi gir1.2-gtk-4.0 gir1.2-adw-1
-rm -rf venv
-python3 -m venv venv --system-site-packages
-source venv/bin/activate
+rm -rf gsdeploy-venv
+python3 -m venv gsdeploy-venv --system-site-packages
+source gsdeploy-venv/bin/activate
 ```
 
 **`ansible: command not found`**

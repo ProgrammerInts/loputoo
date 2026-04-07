@@ -33,9 +33,78 @@ def _migrate(conn):
         conn.execute("UPDATE vms SET initial_user = ssh_user WHERE initial_user = ''")
     if "admin_password" not in cols:
         conn.execute("ALTER TABLE vms ADD COLUMN admin_password TEXT NOT NULL DEFAULT ''")
+    # Drop UNIQUE constraint on hostname (requires table recreation in SQLite)
+    needs_recreate = False
+    for row in conn.execute("PRAGMA index_list(vms)").fetchall():
+        if row["unique"]:
+            info = conn.execute(f"PRAGMA index_info({row['name']})").fetchall()
+            if any(c["name"] == "hostname" for c in info):
+                needs_recreate = True
+                break
+    if needs_recreate:
+        conn.executescript("""
+            CREATE TABLE vms_new (
+                id             INTEGER PRIMARY KEY AUTOINCREMENT,
+                name           TEXT NOT NULL UNIQUE,
+                hostname       TEXT NOT NULL,
+                ip             TEXT NOT NULL,
+                initial_user   TEXT NOT NULL,
+                ssh_user       TEXT NOT NULL,
+                admin_username TEXT NOT NULL DEFAULT 'admin',
+                admin_password TEXT NOT NULL DEFAULT '',
+                ssh_key        TEXT NOT NULL DEFAULT '~/.ssh/id_ed25519',
+                vm_type        TEXT NOT NULL DEFAULT 'game'
+            );
+            INSERT INTO vms_new SELECT * FROM vms;
+            DROP TABLE vms;
+            ALTER TABLE vms_new RENAME TO vms;
+        """)
+    # Enforce at most one monitoring VM via partial unique index
+    conn.execute("""
+        CREATE UNIQUE INDEX IF NOT EXISTS one_monitoring_vm
+        ON vms((1)) WHERE vm_type = 'monitoring'
+    """)
     gs_cols = [r[1] for r in conn.execute("PRAGMA table_info(game_servers)").fetchall()]
     if "version" not in gs_cols:
         conn.execute("ALTER TABLE game_servers ADD COLUMN version TEXT NOT NULL DEFAULT ''")
+    if "config" not in gs_cols:
+        conn.execute("ALTER TABLE game_servers ADD COLUMN config TEXT NOT NULL DEFAULT '{}'")
+    # Add UNIQUE(vm_id, name) to game_servers if missing
+    gs_indexes = [r[1] for r in conn.execute("PRAGMA index_list(game_servers)").fetchall()]
+    has_unique = any(
+        conn.execute(f"PRAGMA index_info({idx})").fetchall()
+        and conn.execute(f"PRAGMA index_list(game_servers)").fetchall()
+        for idx in gs_indexes
+    )
+    # Simpler check: recreate if no unique index covers (vm_id, name)
+    needs_gs_recreate = True
+    for row in conn.execute("PRAGMA index_list(game_servers)").fetchall():
+        if row["unique"]:
+            cols = [c["name"] for c in conn.execute(f"PRAGMA index_info({row['name']})").fetchall()]
+            if "vm_id" in cols and "name" in cols:
+                needs_gs_recreate = False
+                break
+    if needs_gs_recreate:
+        conn.executescript("""
+            DELETE FROM game_servers WHERE id NOT IN (
+                SELECT MIN(id) FROM game_servers GROUP BY vm_id, name
+            );
+            DROP TABLE IF EXISTS game_servers_new;
+            CREATE TABLE game_servers_new (
+                id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                vm_id       INTEGER NOT NULL REFERENCES vms(id) ON DELETE CASCADE,
+                name        TEXT NOT NULL,
+                game_type   TEXT NOT NULL,
+                port        INTEGER NOT NULL,
+                version     TEXT NOT NULL DEFAULT '',
+                status      TEXT NOT NULL DEFAULT 'unknown',
+                config      TEXT NOT NULL DEFAULT '{}',
+                UNIQUE(vm_id, name)
+            );
+            INSERT INTO game_servers_new SELECT id, vm_id, name, game_type, port, version, status, '{}' FROM game_servers;
+            DROP TABLE game_servers;
+            ALTER TABLE game_servers_new RENAME TO game_servers;
+        """)
 
 
 def init_db():
@@ -44,7 +113,7 @@ def init_db():
             CREATE TABLE IF NOT EXISTS vms (
                 id             INTEGER PRIMARY KEY AUTOINCREMENT,
                 name           TEXT NOT NULL UNIQUE,
-                hostname       TEXT NOT NULL UNIQUE,
+                hostname       TEXT NOT NULL,
                 ip             TEXT NOT NULL,
                 initial_user   TEXT NOT NULL,
                 ssh_user       TEXT NOT NULL,
@@ -61,7 +130,9 @@ def init_db():
                 game_type   TEXT NOT NULL,
                 port        INTEGER NOT NULL,
                 version     TEXT NOT NULL DEFAULT '',
-                status      TEXT NOT NULL DEFAULT 'unknown'
+                status      TEXT NOT NULL DEFAULT 'unknown',
+                config      TEXT NOT NULL DEFAULT '{}',
+                UNIQUE(vm_id, name)
             );
 
             CREATE TABLE IF NOT EXISTS settings (
@@ -130,11 +201,21 @@ def get_servers(vm_id=None):
         return conn.execute("SELECT * FROM game_servers ORDER BY name").fetchall()
 
 
-def add_server(vm_id, name, game_type, port, version=""):
+def add_server(vm_id, name, game_type, port, version="", config=None):
+    import json
+    config_json = json.dumps(config or {})
     with get_connection() as conn:
         conn.execute(
-            "INSERT INTO game_servers (vm_id, name, game_type, port, version) VALUES (?, ?, ?, ?, ?)",
-            (vm_id, name, game_type, port, version),
+            """
+            INSERT INTO game_servers (vm_id, name, game_type, port, version, config)
+            VALUES (?, ?, ?, ?, ?, ?)
+            ON CONFLICT(vm_id, name) DO UPDATE SET
+                game_type = excluded.game_type,
+                port      = excluded.port,
+                version   = excluded.version,
+                config    = excluded.config
+            """,
+            (vm_id, name, game_type, port, version, config_json),
         )
 
 

@@ -33,6 +33,7 @@
     port: "{{ server_port | int + 1000 }}"
     proto: tcp
     src: "{{ monitoring_host_ip }}"
+  when: monitoring_host_ip != ''
 
 - name: Start Minecraft server
   community.docker.docker_compose_v2:

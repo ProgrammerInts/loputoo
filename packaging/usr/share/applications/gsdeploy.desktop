@@ -1,0 +1,8 @@
+[Desktop Entry]
+Name=GSDeploy
+Comment=Game server deployment and monitoring
+Exec=gsdeploy
+Icon=applications-games-symbolic
+Terminal=false
+Type=Application
+Categories=Utility;

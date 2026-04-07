@@ -285,9 +285,12 @@ class DeployWizardPage(Gtk.Box):
             self._mc_mode_row.set_text("survival")
             self._mc_difficulty_row.set_text("normal")
             self._mc_max_players_row.set_text("20")
+            mods_note = Adw.ActionRow(title="Mods & modpacks")
+            mods_note.set_subtitle("Add mods after deployment via the Modifications tab")
+            mods_note.set_icon_name("dialog-information-symbolic")
             for row in [self._mc_type_row, self._mc_java_row, self._mc_version_row, self._mc_memory_row,
                         self._mc_mode_row, self._mc_difficulty_row,
-                        self._mc_max_players_row]:
+                        self._mc_max_players_row, mods_note]:
                 group.add(row)
 
         elif self._selected_game == "valheim":
@@ -547,7 +550,8 @@ class DeployWizardPage(Gtk.Box):
             version = self._fac_version_row.get_text().strip()
 
         self._pending_deploy = {"vm_id": vm["id"], "name": server_name,
-                                "game_type": game, "port": port, "version": version}
+                                "game_type": game, "port": port, "version": version,
+                                "config": extra_vars}
 
         self._append_log(f"Deploying {game} server '{server_name}' on {vm['name']}...\n\n")
         self.interrupt_btn.set_visible(True)
@@ -571,7 +575,7 @@ class DeployWizardPage(Gtk.Box):
             self._append_log("\n✓ Deployment completed successfully!\n")
             p = self._pending_deploy
             try:
-                db.add_server(p["vm_id"], p["name"], p["game_type"], int(p["port"]), p.get("version", ""))
+                db.add_server(p["vm_id"], p["name"], p["game_type"], int(p["port"]), p.get("version", ""), p.get("config"))
             except Exception:
                 pass
         else:

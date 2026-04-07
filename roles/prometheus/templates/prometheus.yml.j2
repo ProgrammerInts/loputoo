@@ -11,32 +11,19 @@ scrape_configs:
     static_configs:
       - targets:
 {% for host in groups['all'] | sort %}
+{% if hostvars[host]['ansible_host'] is defined %}
           - '{{ hostvars[host]["ansible_host"] }}:9100'
+{% endif %}
 {% endfor %}
 
   - job_name: 'cadvisor'
     static_configs:
       - targets:
-{% for host in groups['game_servers'] | sort %}
+{% for host in groups.get('game_servers', []) | sort %}
+{% if hostvars[host]['ansible_host'] is defined %}
           - '{{ hostvars[host]["ansible_host"] }}:8080'
+{% endif %}
 {% endfor %}
-
-  - job_name: 'blackbox_tcp'
-    metrics_path: /probe
-    params:
-      module: [tcp_connect]
-    static_configs:
-      - targets:
-{% for host in groups['game_servers'] | sort %}
-          - '{{ hostvars[host]["ansible_host"] }}:25565'
-{% endfor %}
-    relabel_configs:
-      - source_labels: [__address__]
-        target_label: __param_target
-      - source_labels: [__param_target]
-        target_label: instance
-      - target_label: __address__
-        replacement: localhost:9115
 
   - job_name: 'mc_monitor'
     file_sd_configs:

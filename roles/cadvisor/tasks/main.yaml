@@ -5,6 +5,7 @@
     port: "8080"
     proto: tcp
     src: "{{ monitoring_host_ip }}"
+  when: monitoring_host_ip | default('') != ''
 
 - name: Run cAdvisor container
   community.docker.docker_container:

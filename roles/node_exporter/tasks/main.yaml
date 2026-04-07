@@ -17,3 +17,4 @@
     port: "9100"
     proto: tcp
     src: "{{ monitoring_host_ip }}"
+  when: monitoring_host_ip | default('') != ''

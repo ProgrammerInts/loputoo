@@ -29,4 +29,5 @@
         dest: "/etc/prometheus/targets/{{ server_name }}.json"
         mode: "0644"
         owner: prometheus
-      when: game_type == 'minecraft'
+      when: game_type == 'minecraft' and groups['monitoring'] | length > 0
+

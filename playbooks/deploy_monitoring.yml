@@ -14,7 +14,6 @@
     - node_exporter
     - loki
     - prometheus
-    - blackbox_exporter
     - grafana
   post_tasks:
     - name: Allow Grafana port

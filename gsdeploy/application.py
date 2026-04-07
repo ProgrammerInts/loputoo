@@ -5,6 +5,7 @@ from gi.repository import Adw, Gio
 
 from gsdeploy.window import GsDeployWindow
 from gsdeploy.database import init_db
+from gsdeploy.ansible_runner import sync_inventory_from_db
 
 
 class GsDeployApplication(Adw.Application):
@@ -17,5 +18,6 @@ class GsDeployApplication(Adw.Application):
 
     def on_activate(self, app):
         init_db()
+        sync_inventory_from_db()
         win = GsDeployWindow(application=app)
         win.present()

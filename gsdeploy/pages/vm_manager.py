@@ -106,7 +106,7 @@ class VMManagerPage(Gtk.Box):
         row.add_suffix(edit_btn)
 
         remove_btn = Gtk.Button(icon_name="user-trash-symbolic")
-        remove_btn.set_css_classes(["flat", "destructive-action"])
+        remove_btn.set_css_classes(["flat"])
         remove_btn.set_valign(Gtk.Align.CENTER)
         remove_btn.set_tooltip_text("Remove VM")
         remove_btn.connect("clicked", self._on_remove, vm["id"])
@@ -127,10 +127,10 @@ class VMManagerPage(Gtk.Box):
             btn.set_sensitive(True)
             if ok:
                 btn.set_icon_name("emblem-ok-symbolic")
-                self._show_toast(f"{vm['name']} is reachable via SSH")
+                self._show_toast(f"{vm['name']} is reachable")
             else:
                 btn.set_icon_name("dialog-error-symbolic")
-                self._show_toast(f"{vm['name']} is not reachable — check IP, SSH key, and that the VM is online")
+                self._show_toast(f"{vm['name']} is not reachable — check IP and that the VM is online")
 
         runner.check_connection(
             ip=vm["ip"],
@@ -196,9 +196,16 @@ class VMManagerPage(Gtk.Box):
         interrupt_btn.set_css_classes(["destructive-action", "pill"])
         interrupt_btn.set_visible(False)
 
+        mon_spinner = Gtk.Spinner()
+        mon_spinner.set_margin_top(4)
+        mon_spinner.set_margin_bottom(4)
+        mon_spinner.set_visible(False)
+        self._mon_spinner = mon_spinner
+
         deploy_btn.connect("clicked", self._run_monitoring_deploy, vm, dialog, deploy_btn, interrupt_btn)
         interrupt_btn.connect("clicked", self._interrupt_monitoring, interrupt_btn, deploy_btn)
 
+        btn_box.append(mon_spinner)
         btn_box.append(deploy_btn)
         btn_box.append(interrupt_btn)
 
@@ -212,8 +219,12 @@ class VMManagerPage(Gtk.Box):
         self._mon_scroll.set_visible(True)
         deploy_btn.set_sensitive(False)
         interrupt_btn.set_visible(True)
+        self._mon_spinner.set_visible(True)
+        self._mon_spinner.start()
 
         def _on_mon_done(ok):
+            self._mon_spinner.stop()
+            self._mon_spinner.set_visible(False)
             deploy_btn.set_sensitive(True)
             interrupt_btn.set_visible(False)
             self._mon_cancel = None
@@ -233,6 +244,8 @@ class VMManagerPage(Gtk.Box):
             self._mon_cancel = None
         interrupt_btn.set_visible(False)
         deploy_btn.set_sensitive(True)
+        self._mon_spinner.stop()
+        self._mon_spinner.set_visible(False)
         self._mon_log("\n⚠ Interrupted by user. Monitoring may be partially installed.\n")
 
     def _mon_log(self, text):
@@ -332,7 +345,16 @@ class VMManagerPage(Gtk.Box):
         vm_type    = "monitoring" if self._type_row.get_selected() == 1 else "game"
 
         if not name or not ip or not user or not admin_user or not admin_pass:
-            self._show_error("All fields except SSH Key Path are required.")
+            self._show_error("All fields are required.")
+            return
+
+        if db.slugify(name) in ("all", "ungrouped", "localhost") or \
+           (vm_type == "game" and db.slugify(name) == "monitoring"):
+            self._show_error(f"'{name}' is a reserved name, please choose a different name.")
+            return
+
+        if vm_type == "monitoring" and db.get_vms_by_type("monitoring"):
+            self._show_error("A monitoring VM already exists. Only one monitoring VM is supported.")
             return
 
         try:
@@ -383,6 +405,12 @@ class VMManagerPage(Gtk.Box):
         scroll.set_visible(False)
         self._prov_scroll = scroll
 
+        spinner = Gtk.Spinner()
+        spinner.set_margin_top(4)
+        spinner.set_margin_bottom(4)
+        spinner.set_visible(False)
+        self._prov_spinner = spinner
+
         btn_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
         btn_box.set_halign(Gtk.Align.CENTER)
         btn_box.set_margin_top(8)
@@ -398,6 +426,7 @@ class VMManagerPage(Gtk.Box):
         provision_btn.connect("clicked", self._run_provision, vm, dialog, provision_btn, interrupt_btn)
         interrupt_btn.connect("clicked", self._interrupt_provision, interrupt_btn, provision_btn)
 
+        btn_box.append(spinner)
         btn_box.append(provision_btn)
         btn_box.append(interrupt_btn)
 
@@ -413,8 +442,12 @@ class VMManagerPage(Gtk.Box):
         self._prov_scroll.set_visible(True)
         provision_btn.set_sensitive(False)
         interrupt_btn.set_visible(True)
+        self._prov_spinner.set_visible(True)
+        self._prov_spinner.start()
 
         def on_done(success):
+            self._prov_spinner.stop()
+            self._prov_spinner.set_visible(False)
             provision_btn.set_sensitive(True)
             interrupt_btn.set_visible(False)
             self._prov_cancel = None
@@ -427,6 +460,7 @@ class VMManagerPage(Gtk.Box):
 
         self._prov_cancel = runner.run_provision_vm(
             hostname=vm["hostname"],
+            ip=vm["ip"],
             initial_user=vm["initial_user"],
             initial_ssh_pass=become_pass,
             admin_username=vm["admin_username"],
@@ -441,6 +475,8 @@ class VMManagerPage(Gtk.Box):
             self._prov_cancel()
             self._prov_cancel = None
         interrupt_btn.set_visible(False)
+        self._prov_spinner.stop()
+        self._prov_spinner.set_visible(False)
         provision_btn.set_sensitive(True)
         self._prov_log("\n⚠ Interrupted by user. VM may be partially provisioned — re-run provisioning to fix.\n")
 
@@ -522,9 +558,22 @@ class VMManagerPage(Gtk.Box):
         vm_type    = "monitoring" if self._edit_type_row.get_selected() == 1 else "game"
 
         if not name or not ip or not user or not admin_user or not admin_pass:
-            self._edit_error_label.set_text("All fields except SSH Key Path are required.")
+            self._edit_error_label.set_text("All fields are required.")
             self._edit_error_label.set_visible(True)
             return
+
+        if db.slugify(name) in ("all", "ungrouped", "localhost") or \
+           (vm_type == "game" and db.slugify(name) == "monitoring"):
+            self._edit_error_label.set_text(f"'{name}' is a reserved name, please choose a different name.")
+            self._edit_error_label.set_visible(True)
+            return
+
+        if vm_type == "monitoring":
+            existing = db.get_vms_by_type("monitoring")
+            if any(v["id"] != old_vm["id"] for v in existing):
+                self._edit_error_label.set_text("A monitoring VM already exists. Only one monitoring VM is supported.")
+                self._edit_error_label.set_visible(True)
+                return
 
         try:
             db.update_vm(old_vm["id"], name, ip, user, admin_user, admin_pass, key, vm_type)

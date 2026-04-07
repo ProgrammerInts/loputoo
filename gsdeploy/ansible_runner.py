@@ -1,14 +1,82 @@
 import os
 import re
+import shutil
 import subprocess
 import tempfile
 import threading
 from gi.repository import GLib
 
-PLAYBOOK_DIR = os.path.join(os.path.dirname(__file__), "..", "playbooks")
-INVENTORY    = os.path.normpath(os.path.join(os.path.dirname(__file__), "..", "hosts"))
-HOST_VARS    = os.path.normpath(os.path.join(os.path.dirname(__file__), "..", "host_vars"))
-ANSIBLE_CFG  = os.path.normpath(os.path.join(os.path.dirname(__file__), ".."))
+_APP_SHARE   = os.path.normpath(os.path.join(os.path.dirname(__file__), ".."))
+_USER_DATA   = os.path.expanduser("~/.local/share/gsdeploy")
+
+PLAYBOOK_DIR = os.path.join(_APP_SHARE, "playbooks")
+ANSIBLE_CFG  = os.path.join(_APP_SHARE, "ansible.cfg")
+ROLES_PATH   = os.path.join(_APP_SHARE, "roles")
+INVENTORY    = os.path.join(_USER_DATA, "hosts")
+HOST_VARS    = os.path.join(_USER_DATA, "host_vars")
+
+
+def _ansible_env():
+    env = os.environ.copy()
+    env["ANSIBLE_CONFIG"]     = ANSIBLE_CFG
+    env["ANSIBLE_ROLES_PATH"] = ROLES_PATH
+    return env
+
+# Ensure user data dirs exist
+os.makedirs(HOST_VARS, exist_ok=True)
+# Seed inventory file if missing
+if not os.path.exists(INVENTORY):
+    _src = os.path.normpath(os.path.join(_APP_SHARE, "hosts"))
+    if os.path.exists(_src):
+        shutil.copy(_src, INVENTORY)
+    else:
+        with open(INVENTORY, "w") as _f:
+            _f.write("[game_servers]\n\n[monitoring]\n")
+# Always sync group_vars next to inventory so Ansible can find them
+_gv_src = os.path.normpath(os.path.join(_APP_SHARE, "group_vars"))
+_gv_dst = os.path.join(_USER_DATA, "group_vars")
+if os.path.exists(_gv_src):
+    if os.path.exists(_gv_dst):
+        shutil.rmtree(_gv_dst)
+    shutil.copytree(_gv_src, _gv_dst)
+
+
+def sync_inventory_from_db():
+    """Rebuild inventory and host_vars from the database, removing stale entries."""
+    from gsdeploy.database import get_connection
+    try:
+        with get_connection() as conn:
+            vms = conn.execute("SELECT * FROM vms").fetchall()
+    except Exception:
+        return
+
+    # Rebuild inventory file from scratch
+    game_hosts = [v for v in vms if v["vm_type"] != "monitoring"]
+    mon_hosts  = [v for v in vms if v["vm_type"] == "monitoring"]
+
+    lines = ["[game_servers]\n"]
+    for v in game_hosts:
+        lines.append(v["hostname"] + "\n")
+    lines.append("\n[monitoring]\n")
+    for v in mon_hosts:
+        lines.append(v["hostname"] + "\n")
+
+    with open(INVENTORY, "w") as f:
+        f.writelines(lines)
+
+    # Remove stale host_vars files
+    known = {v["hostname"] for v in vms}
+    if os.path.isdir(HOST_VARS):
+        for fname in os.listdir(HOST_VARS):
+            hostname = fname.replace(".yaml", "")
+            if hostname not in known:
+                os.remove(os.path.join(HOST_VARS, fname))
+
+    # Write host_vars for all VMs
+    for v in vms:
+        path = os.path.join(HOST_VARS, f"{v['hostname']}.yaml")
+        with open(path, "w") as f:
+            f.write(f"---\nansible_host: \"{v['ip']}\"\nansible_user: {v['ssh_user']}\nansible_ssh_private_key_file: {v['ssh_key']}\n")
 
 
 # ── Inventory management ─────────────────────────────────────────────────────
@@ -55,6 +123,19 @@ def remove_from_inventory(hostname):
         f.writelines(filtered)
 
 
+def _get_monitoring_ip():
+    """Get the monitoring VM's IP from the database."""
+    from gsdeploy.database import get_connection
+    try:
+        with get_connection() as conn:
+            row = conn.execute(
+                "SELECT ip FROM vms WHERE vm_type = 'monitoring' LIMIT 1"
+            ).fetchone()
+            return row["ip"] if row else ""
+    except Exception:
+        return ""
+
+
 def _run_playbook(cmd, env, become_pass, log_callback, done_callback):
     """
     Run an Ansible playbook in a background thread, streaming output.
@@ -68,7 +149,7 @@ def _run_playbook(cmd, env, become_pass, log_callback, done_callback):
             tf_path = tf.name
         try:
             proc = subprocess.Popen(
-                cmd + ["--become-password-file", tf_path],
+                cmd + ["-i", INVENTORY, "--become-password-file", tf_path],
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT,
                 text=True,
@@ -101,17 +182,16 @@ def run_deploy_gameserver(vm_name, game_type, server_name, port, admin_username,
     Returns a cancel() function that kills the process.
     """
     extra = {
-        "target":         vm_name,
-        "game_type":      game_type,
-        "server_name":    server_name,
-        "server_port":    str(port),
-        "admin_username": admin_username,
+        "target":            vm_name,
+        "game_type":         game_type,
+        "server_name":       server_name,
+        "server_port":       str(port),
+        "admin_username":    admin_username,
+        "monitoring_host_ip": _get_monitoring_ip(),
     }
     extra.update(extra_vars)
 
-    env = os.environ.copy()
-    env["ANSIBLE_CONFIG"] = os.path.join(ANSIBLE_CFG, "ansible.cfg")
-
+    env = _ansible_env()
     cmd = ["ansible-playbook", os.path.join(PLAYBOOK_DIR, "deploy_gameserver.yml")]
     for k, v in extra.items():
         cmd += ["-e", f"{k}={v}"]
@@ -119,17 +199,20 @@ def run_deploy_gameserver(vm_name, game_type, server_name, port, admin_username,
     return _run_playbook(cmd, env, become_pass, log_callback, done_callback)
 
 
-def run_provision_vm(hostname, initial_user, initial_ssh_pass, admin_username, admin_password,
+def run_provision_vm(hostname, ip, initial_user, initial_ssh_pass, admin_username, admin_password,
                      deployer_ssh_key, log_callback, done_callback):
     """
     Run provision_vm.yml in a background thread.
     Returns a cancel() function that kills the process.
     """
-    env = os.environ.copy()
-    env["ANSIBLE_CONFIG"] = os.path.join(ANSIBLE_CFG, "ansible.cfg")
+    env = _ansible_env()
     proc_ref = [None]
 
+    monitoring_ip = _get_monitoring_ip()
+
     def _run():
+        GLib.idle_add(log_callback,
+                      f"[gsdeploy] monitoring_host_ip resolved to: '{monitoring_ip}'\n")
         with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as tf:
             tf.write(f"initial_ssh_pass: '{initial_ssh_pass}'\n")
             tf.write(f"initial_become_pass: '{initial_ssh_pass}'\n")
@@ -140,8 +223,11 @@ def run_provision_vm(hostname, initial_user, initial_ssh_pass, admin_username, a
             cmd = [
                 "ansible-playbook",
                 os.path.join(PLAYBOOK_DIR, "provision_vm.yml"),
-                "-e", (f"target={hostname} initial_user={initial_user} "
-                       f"admin_username={admin_username} deployer_ssh_key={deployer_ssh_key}"),
+                "-i", INVENTORY,
+                "-i", f"{ip},",
+                "-e", (f"target={ip} initial_user={initial_user} "
+                       f"admin_username={admin_username} deployer_ssh_key={deployer_ssh_key} "
+                       f"monitoring_host_ip={monitoring_ip}"),
                 "-e", f"@{tf_path}",
             ]
             proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
@@ -171,8 +257,7 @@ def run_remove_gameserver(vm_name, server_name, become_pass, log_callback, done_
     Run remove_gameserver.yml in a background thread.
     Stops and removes the container but leaves data directories intact.
     """
-    env = os.environ.copy()
-    env["ANSIBLE_CONFIG"] = os.path.join(ANSIBLE_CFG, "ansible.cfg")
+    env = _ansible_env()
     cmd = [
         "ansible-playbook",
         os.path.join(PLAYBOOK_DIR, "remove_gameserver.yml"),
@@ -364,23 +449,17 @@ def get_public_ip(ip, ssh_user, ssh_key, done_callback):
     threading.Thread(target=_run, daemon=True).start()
 
 
-def check_connection(ip, ssh_user, ssh_key, done_callback):
+def check_connection(ip, ssh_user, ssh_key, done_callback, initial_user=None, initial_pass=None):
     """
-    Test SSH connectivity to a VM.
-    Calls done_callback(True) on success, done_callback(False) on failure.
+    Test reachability of a VM by pinging its IP.
+    Calls done_callback(True) if reachable, done_callback(False) otherwise.
     """
     def _run():
-        key = os.path.expanduser(ssh_key)
-        cmd = [
-            "ssh", "-i", key,
-            "-o", "StrictHostKeyChecking=no",
-            "-o", "BatchMode=yes",
-            "-o", "ConnectTimeout=5",
-            f"{ssh_user}@{ip}",
-            "exit",
-        ]
         try:
-            proc = subprocess.run(cmd, capture_output=True, timeout=10)
+            proc = subprocess.run(
+                ["ping", "-c", "1", "-W", "3", ip],
+                capture_output=True, timeout=10
+            )
             GLib.idle_add(done_callback, proc.returncode == 0)
         except Exception:
             GLib.idle_add(done_callback, False)
@@ -421,11 +500,12 @@ def run_deploy_monitoring(vm_name, become_pass, log_callback, done_callback):
     Run deploy_monitoring.yml in a background thread, targeting vm_name.
     Returns a cancel() function that kills the process.
     """
-    env = os.environ.copy()
-    env["ANSIBLE_CONFIG"] = os.path.join(ANSIBLE_CFG, "ansible.cfg")
+    env = _ansible_env()
+    monitoring_ip = _get_monitoring_ip()
     cmd = [
         "ansible-playbook",
         os.path.join(PLAYBOOK_DIR, "deploy_monitoring.yml"),
         "-e", f"target={vm_name}",
+        "-e", f"monitoring_host_ip={monitoring_ip}",
     ]
     return _run_playbook(cmd, env, become_pass, log_callback, done_callback)

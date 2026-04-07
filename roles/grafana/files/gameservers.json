@@ -6,119 +6,189 @@
   "schemaVersion": 38,
   "refresh": "10s",
   "time": {"from": "now-30m", "to": "now"},
+  "templating": {
+    "list": [
+      {
+        "name": "server_name",
+        "label": "Server",
+        "type": "query",
+        "datasource": {"type": "loki", "uid": "loki_ds"},
+        "query": "label_values(server_name)",
+        "multi": true,
+        "includeAll": true,
+        "allValue": ".*",
+        "current": {"selected": true, "text": "All", "value": "$__all"},
+        "refresh": 2
+      },
+      {
+        "name": "game_type",
+        "label": "Game",
+        "type": "query",
+        "datasource": {"type": "loki", "uid": "loki_ds"},
+        "query": "label_values(game_type)",
+        "multi": true,
+        "includeAll": true,
+        "allValue": ".*",
+        "current": {"selected": true, "text": "All", "value": "$__all"},
+        "refresh": 2
+      }
+    ]
+  },
   "panels": [
+    {
+      "type": "stat",
+      "title": "Container Status",
+      "gridPos": {"h": 4, "w": 24, "x": 0, "y": 0},
+      "datasource": {"type": "prometheus", "uid": "prometheus_ds"},
+      "options": {
+        "reduceOptions": {"calcs": ["lastNotNull"]},
+        "orientation": "horizontal",
+        "textMode": "value_and_name",
+        "colorMode": "background"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "1": {"text": "UP", "color": "green", "index": 0},
+                "0": {"text": "DOWN", "color": "red", "index": 1}
+              }
+            }
+          ],
+          "thresholds": {"mode": "absolute", "steps": [{"color": "red", "value": null}, {"color": "green", "value": 1}]}
+        }
+      },
+      "targets": [
+        {
+          "expr": "count(container_last_seen{image!=\"\",name!~\".*monitor.*|cadvisor|promtail|grafana|loki|prometheus|blackbox.*\",name!=\"\"}) by (name)",
+          "legendFormat": "{{name}}"
+        }
+      ]
+    },
     {
       "type": "timeseries",
       "title": "Container CPU Usage %",
-      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 0},
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 4},
       "datasource": {"type": "prometheus", "uid": "prometheus_ds"},
       "targets": [
         {
-          "expr": "rate(container_cpu_usage_seconds_total{image!=\"\",name!~\".*monitor.*|cadvisor\",name!=\"\"}[1m]) * 100",
-          "legendFormat": "{{name}} ({{image}})"
+          "expr": "rate(container_cpu_usage_seconds_total{image!=\"\",name!~\".*monitor.*|cadvisor|promtail|grafana|loki|prometheus|blackbox.*\",name!=\"\"}[1m]) * 100",
+          "legendFormat": "{{name}}"
         }
       ]
     },
     {
       "type": "timeseries",
       "title": "Container Memory Usage (MB)",
-      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0},
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 4},
       "datasource": {"type": "prometheus", "uid": "prometheus_ds"},
       "targets": [
         {
-          "expr": "container_memory_usage_bytes{image!=\"\",name!~\".*monitor.*|cadvisor\",name!=\"\"} / 1024 / 1024",
-          "legendFormat": "{{name}} ({{image}})"
+          "expr": "container_memory_usage_bytes{image!=\"\",name!~\".*monitor.*|cadvisor|promtail|grafana|loki|prometheus|blackbox.*\",name!=\"\"} / 1024 / 1024",
+          "legendFormat": "{{name}}"
+        },
+        {
+          "expr": "container_spec_memory_limit_bytes{image!=\"\",name!~\".*monitor.*|cadvisor|promtail|grafana|loki|prometheus|blackbox.*\",name!=\"\"} / 1024 / 1024 > 0",
+          "legendFormat": "{{name}} (limit)"
+        }
+      ]
+    },
+    {
+      "type": "stat",
+      "title": "Automatic Restarts",
+      "gridPos": {"h": 4, "w": 24, "x": 0, "y": 12},
+      "datasource": {"type": "prometheus", "uid": "prometheus_ds"},
+      "options": {
+        "reduceOptions": {"calcs": ["lastNotNull"]},
+        "orientation": "horizontal",
+        "textMode": "value_and_name",
+        "colorMode": "background"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "green", "value": null},
+              {"color": "yellow", "value": 1},
+              {"color": "red", "value": 5}
+            ]
+          }
+        }
+      },
+      "targets": [
+        {
+          "expr": "container_restart_count{image!=\"\",name!~\".*monitor.*|cadvisor|promtail|grafana|loki|prometheus|blackbox.*\",name!=\"\"}",
+          "legendFormat": "{{name}}"
         }
       ]
     },
     {
       "type": "timeseries",
       "title": "Disk I/O (MB/s)",
-      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 8},
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 16},
       "datasource": {"type": "prometheus", "uid": "prometheus_ds"},
       "targets": [
         {
-          "expr": "sum by (name) (rate(container_fs_reads_bytes_total{name!~\".*monitor.*|cadvisor\",name!=\"\"}[1m])) / 1024 / 1024",
-          "legendFormat": "Read - {{name}} ({{image}})"
+          "expr": "sum by (name) (rate(container_fs_reads_bytes_total{name!~\".*monitor.*|cadvisor|promtail|grafana|loki|prometheus|blackbox.*\",name!=\"\"}[1m])) / 1024 / 1024",
+          "legendFormat": "Read - {{name}}"
         },
         {
-          "expr": "sum by (name) (rate(container_fs_writes_bytes_total{name!~\".*monitor.*|cadvisor\",name!=\"\"}[1m])) / 1024 / 1024",
-          "legendFormat": "Write - {{name}} ({{image}})"
+          "expr": "sum by (name) (rate(container_fs_writes_bytes_total{name!~\".*monitor.*|cadvisor|promtail|grafana|loki|prometheus|blackbox.*\",name!=\"\"}[1m])) / 1024 / 1024",
+          "legendFormat": "Write - {{name}}"
         }
       ]
     },
     {
       "type": "timeseries",
       "title": "Network (MB/s)",
-      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 8},
-      "datasource": {"type": "prometheus", "uid": "prometheus_ds"},
-      "targets": [
-        {
-          "expr": "sum by (name) (rate(container_network_receive_bytes_total{name!~\".*monitor.*|cadvisor\",name!=\"\"}[1m])) / 1024 / 1024",
-          "legendFormat": "Download - {{name}} ({{image}})"
-        },
-        {
-          "expr": "sum by (name) (rate(container_network_transmit_bytes_total{name!~\".*monitor.*|cadvisor\",name!=\"\"}[1m])) / 1024 / 1024",
-          "legendFormat": "Upload - {{name}} ({{image}})"
-        }
-      ]
-    },
-    {
-      "type": "timeseries",
-      "title": "Server Latency (ms)",
-      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 16},
-      "datasource": {"type": "prometheus", "uid": "prometheus_ds"},
-      "targets": [
-        {
-          "expr": "probe_duration_seconds{job=\"blackbox_tcp\"} * 1000",
-          "legendFormat": "{{instance}}"
-        }
-      ]
-    },
-    {
-      "type": "timeseries",
-      "title": "Server Availability",
       "gridPos": {"h": 8, "w": 12, "x": 12, "y": 16},
       "datasource": {"type": "prometheus", "uid": "prometheus_ds"},
       "targets": [
         {
-          "expr": "probe_success{job=\"blackbox_tcp\"}",
+          "expr": "sum by (name) (rate(container_network_receive_bytes_total{name!~\".*monitor.*|cadvisor|promtail|grafana|loki|prometheus|blackbox.*\",name!=\"\"}[1m])) / 1024 / 1024",
+          "legendFormat": "Download - {{name}}"
+        },
+        {
+          "expr": "sum by (name) (rate(container_network_transmit_bytes_total{name!~\".*monitor.*|cadvisor|promtail|grafana|loki|prometheus|blackbox.*\",name!=\"\"}[1m])) / 1024 / 1024",
+          "legendFormat": "Upload - {{name}}"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "VM Disk Free Space (GB)",
+      "gridPos": {"h": 8, "w": 24, "x": 0, "y": 24},
+      "datasource": {"type": "prometheus", "uid": "prometheus_ds"},
+      "targets": [
+        {
+          "expr": "node_filesystem_avail_bytes{mountpoint=\"/\",fstype!~\"tmpfs|overlay\",job=\"node_exporter\"} / 1024 / 1024 / 1024",
           "legendFormat": "{{instance}}"
         }
-      ]
-    },
-    {
-      "type": "timeseries",
-      "title": "Minecraft TPS",
-      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 24},
-      "datasource": {"type": "prometheus", "uid": "prometheus_ds"},
-      "targets": [
-        {
-          "expr": "mc_tps",
-          "legendFormat": "{{server}}"
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "decgbytes"
         }
-      ]
-    },
-    {
-      "type": "timeseries",
-      "title": "Minecraft Players Online",
-      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 24},
-      "datasource": {"type": "prometheus", "uid": "prometheus_ds"},
-      "targets": [
-        {
-          "expr": "mc_players_online_count",
-          "legendFormat": "{{server}}"
-        }
-      ]
+      }
     },
     {
       "type": "logs",
       "title": "Game Server Logs",
-      "gridPos": {"h": 10, "w": 24, "x": 0, "y": 32},
+      "gridPos": {"h": 12, "w": 24, "x": 0, "y": 32},
       "datasource": {"type": "loki", "uid": "loki_ds"},
+      "options": {
+        "dedupStrategy": "none",
+        "showLabels": false,
+        "showCommonLabels": false,
+        "wrapLogMessage": true,
+        "sortOrder": "Descending"
+      },
       "targets": [
         {
-          "expr": "{job=\"gameserver\"}",
+          "expr": "{job=\"gameserver\", server_name=~\"$server_name\", game_type=~\"$game_type\"}",
           "legendFormat": ""
         }
       ]
