@@ -70,7 +70,7 @@ Your computer               Gameserver VM
 > WSL2 is not recommended — GTK4 GUI support is limited.
 
 > **Security recommendation:** Use a passphrase-protected SSH key to prevent unauthorized VM access
-> if your computer is compromised:
+> if your computer is compromised (use this if you wish to change passphrase of current key):
 > ```bash
 > ssh-keygen -p -f ~/.ssh/id_ed25519
 > ```
@@ -163,6 +163,7 @@ sudo apt update && sudo apt install -y \
 git clone https://github.com/indrekis/loputoo.git
 cd loputoo
 ```
+Or download via browser
 
 #### 3. Set up SSH key (if you don't have one)
 
@@ -184,22 +185,22 @@ The public key is automatically copied to the VM during provisioning — you don
 > GTK bindings are accessible inside the venv.
 
 ```bash
-python3 -m venv gsdeploy-venv --system-site-packages
-source gsdeploy-venv/bin/activate
-pip install passlib
+user@user: ~/Github/loputoo$ python3 -m venv gsdeploy-venv --system-site-packages
+user@user: ~/Github/loputoo$ source gsdeploy-venv/bin/activate
+user@user: ~/Github/loputoo$ pip install passlib
 ```
 
 #### 5. Install Ansible collections
 
 ```bash
-ansible-galaxy collection install -r requirements.txt
+user@user: ~/Github/loputoo$ ansible-galaxy collection install -r requirements.txt
 ```
 
 #### 6. Run GSDeploy
 
 ```bash
-source gsdeploy-venv/bin/activate
-python3 -m gsdeploy.main
+user@user: ~/Github/loputoo$ source gsdeploy-venv/bin/activate
+user@user: ~/Github/loputoo$ python3 -m gsdeploy.main
 ```
 
 Application data is stored at `~/.local/share/gsdeploy/`.
