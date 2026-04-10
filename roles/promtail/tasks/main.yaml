@@ -1,51 +1,47 @@
 ---
-- name: Add Grafana GPG key
-  apt_key:
-    url: https://apt.grafana.com/gpg.key
-    state: present
+- name: Set up Promtail
   when: monitoring_host_ip | default('') != ''
+  block:
+    - name: Add Grafana GPG key
+      apt_key:
+        url: https://apt.grafana.com/gpg.key
+        state: present
 
-- name: Add Grafana repo
-  apt_repository:
-    repo: "deb https://apt.grafana.com stable main"
-    state: present
-    filename: grafana
-  when: monitoring_host_ip | default('') != ''
+    - name: Add Grafana repo
+      apt_repository:
+        repo: "deb https://apt.grafana.com stable main"
+        state: present
+        filename: grafana
 
-- name: Update APT cache
-  apt:
-    update_cache: yes
-    cache_valid_time: 86400
-  when: monitoring_host_ip | default('') != ''
+    - name: Update APT cache
+      apt:
+        update_cache: yes
+        cache_valid_time: 86400
 
-- name: Install Promtail
-  apt:
-    name: promtail
-    state: present
-  when: monitoring_host_ip | default('') != ''
+    - name: Install Promtail
+      apt:
+        name: promtail
+        state: present
 
-- name: Create Promtail positions directory
-  file:
-    path: /var/lib/promtail
-    state: directory
-    owner: promtail
-    group: root
-    mode: "0755"
-  when: monitoring_host_ip | default('') != ''
+    - name: Create Promtail positions directory
+      file:
+        path: /var/lib/promtail
+        state: directory
+        owner: promtail
+        group: root
+        mode: "0755"
 
-- name: Deploy Promtail config
-  template:
-    src: promtail.yaml.j2
-    dest: /etc/promtail/config.yml
-    owner: promtail
-    group: root
-    mode: "0644"
-  notify: restart promtail
-  when: monitoring_host_ip | default('') != ''
+    - name: Deploy Promtail config
+      template:
+        src: promtail.yaml.j2
+        dest: /etc/promtail/config.yml
+        owner: promtail
+        group: root
+        mode: "0644"
+      notify: restart promtail
 
-- name: Ensure Promtail is running
-  service:
-    name: promtail
-    state: started
-    enabled: true
-  when: monitoring_host_ip | default('') != ''
+    - name: Ensure Promtail is running
+      service:
+        name: promtail
+        state: started
+        enabled: true

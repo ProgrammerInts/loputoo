@@ -21,6 +21,8 @@
   hosts: monitoring
   become: true
   ignore_unreachable: true
+  vars:
+    ansible_become_pass: "{{ monitoring_become_pass | default('') }}"
   tasks:
     - name: Write mc-monitor target file for {{ server_name }}
       copy:

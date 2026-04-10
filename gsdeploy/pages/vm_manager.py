@@ -1,3 +1,5 @@
+import os
+import re
 import gi
 gi.require_version("Gtk", "4.0")
 gi.require_version("Adw", "1")
@@ -5,6 +7,27 @@ from gi.repository import Adw, Gtk
 
 import gsdeploy.database as db
 import gsdeploy.ansible_runner as runner
+
+
+def _validate_vm_fields(name, ip, user, admin_user, key):
+    """Returns an error string or None if valid."""
+    if not re.match(r'^[a-zA-Z0-9][a-zA-Z0-9_\- ]{0,62}$', name):
+        return "Name may only contain letters, numbers, spaces, hyphens and underscores."
+    if re.match(r'^(\d{1,3}\.){3}\d{1,3}$', name):
+        return "Name looks like an IP address — please enter a descriptive name (e.g. 'gameserver-1')."
+    if not re.match(r'^(\d{1,3}\.){3}\d{1,3}$', ip):
+        return "IP address is not valid (expected format: 192.168.1.10)."
+    parts = ip.split(".")
+    if any(int(p) > 255 for p in parts):
+        return "IP address is not valid (each octet must be 0–255)."
+    if not re.match(r'^[a-zA-Z_][a-zA-Z0-9_\-\.]{0,31}$', user):
+        return "Initial SSH user must start with a letter or underscore, contain only letters, numbers, hyphens, underscores or dots, and be at most 32 characters."
+    if not re.match(r'^[a-zA-Z_][a-zA-Z0-9_\-\.]{0,31}$', admin_user):
+        return "Admin username must start with a letter or underscore, contain only letters, numbers, hyphens, underscores or dots, and be at most 32 characters."
+    key_path = os.path.expanduser(key)
+    if not os.path.exists(key_path):
+        return f"SSH key not found: {key}"
+    return None
 
 
 class VMManagerPage(Gtk.Box):
@@ -299,6 +322,8 @@ class VMManagerPage(Gtk.Box):
         self._admin_user_row  = Adw.EntryRow(title="Admin Username")
         self._admin_user_row.set_text("admin")
         self._admin_pass_row  = Adw.PasswordEntryRow(title="Admin Password")
+        self._admin_pass_row.set_show_apply_button(False)
+        self._admin_pass_row.get_delegate().set_placeholder_text("Recommended: 8+ characters")
         self._key_row         = Adw.EntryRow(title="SSH Key Path")
         self._key_row.set_text("~/.ssh/id_ed25519")
 
@@ -318,6 +343,7 @@ class VMManagerPage(Gtk.Box):
         self._error_label.set_css_classes(["error"])
         self._error_label.set_margin_start(16)
         self._error_label.set_margin_end(16)
+        self._error_label.set_wrap(True)
         self._error_label.set_visible(False)
 
         add_btn = Gtk.Button(label="Add VM")
@@ -346,6 +372,11 @@ class VMManagerPage(Gtk.Box):
 
         if not name or not ip or not user or not admin_user or not admin_pass:
             self._show_error("All fields are required.")
+            return
+
+        err = _validate_vm_fields(name, ip, user, admin_user, key)
+        if err:
+            self._show_error(err)
             return
 
         if db.slugify(name) in ("all", "ungrouped", "localhost") or \
@@ -512,6 +543,7 @@ class VMManagerPage(Gtk.Box):
         self._edit_admin_user_row = Adw.EntryRow(title="Admin Username")
         self._edit_admin_user_row.set_text(vm["admin_username"])
         self._edit_admin_pass_row = Adw.PasswordEntryRow(title="Admin Password")
+        self._edit_admin_pass_row.get_delegate().set_placeholder_text("Recommended: 8+ characters")
         self._edit_admin_pass_row.set_text(vm["admin_password"])
         self._edit_key_row        = Adw.EntryRow(title="SSH Key Path")
         self._edit_key_row.set_text(vm["ssh_key"])
@@ -531,6 +563,7 @@ class VMManagerPage(Gtk.Box):
         self._edit_error_label.set_css_classes(["error"])
         self._edit_error_label.set_margin_start(16)
         self._edit_error_label.set_margin_end(16)
+        self._edit_error_label.set_wrap(True)
         self._edit_error_label.set_visible(False)
 
         save_btn = Gtk.Button(label="Save")
@@ -559,6 +592,12 @@ class VMManagerPage(Gtk.Box):
 
         if not name or not ip or not user or not admin_user or not admin_pass:
             self._edit_error_label.set_text("All fields are required.")
+            self._edit_error_label.set_visible(True)
+            return
+
+        err = _validate_vm_fields(name, ip, user, admin_user, key)
+        if err:
+            self._edit_error_label.set_text(err)
             self._edit_error_label.set_visible(True)
             return
 

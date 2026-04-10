@@ -15,9 +15,11 @@ services:
       MOTD: "{{ minecraft_motd | default(server_name) }}"
       LEVEL_SEED: "{{ minecraft_seed | default('') }}"
       MODE: "{{ minecraft_mode | default('survival') }}"
+      WHITELIST: "{{ minecraft_whitelist | default('false') }}"
       ENABLE_RCON: "true"
       RCON_PASSWORD: "{{ minecraft_rcon_password | default('rconpassword') }}"
       RCON_PORT: "25575"
+      SERVER_PORT: "{{ server_port | default(25565) }}"
     ports:
       - "{{ server_port | default(25565) }}:{{ server_port | default(25565) }}"
     volumes:

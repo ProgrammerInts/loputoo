@@ -1,7 +1,7 @@
 import gi
 gi.require_version("Gtk", "4.0")
 gi.require_version("Adw", "1")
-from gi.repository import Adw, Gtk
+from gi.repository import Adw, Gtk, Gdk
 
 import gsdeploy.database as db
 import gsdeploy.ansible_runner as runner
@@ -25,36 +25,34 @@ class DeployWizardPage(Gtk.Box):
         self._cancel_deploy  = None
 
         self._build_ui()
-        self.connect("map", lambda _: self._populate_vm_list())
+        self.connect("map", self._on_map)
+
+    def _on_map(self, _):
+        self._populate_vm_list()
 
     def _build_ui(self):
-        # Carousel
-        self.carousel = Adw.Carousel()
-        self.carousel.set_allow_scroll_wheel(False)
-        self.carousel.set_allow_mouse_drag(False)
-        self.carousel.set_vexpand(True)
+        self._step_names = ["vm", "game", "configure", "deploy"]
 
-        def _scrolled(step):
-            scroll = Gtk.ScrolledWindow()
-            scroll.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
-            scroll.set_vexpand(True)
-            scroll.set_child(step)
-            return scroll
+        self.stack = Adw.ViewStack()
+        self.stack.set_vexpand(True)
 
-        self.carousel.append(_scrolled(self._build_step_vm()))
-        self.carousel.append(_scrolled(self._build_step_game()))
-        self.carousel.append(_scrolled(self._build_step_configure()))
-        self.carousel.append(self._build_step_deploy())
+        self.stack.add_titled_with_icon(
+            self._build_step_vm(), "vm", "Virtual Machine", "computer-symbolic")
+        self.stack.add_titled_with_icon(
+            self._build_step_game(), "game", "Game", "applications-games-symbolic")
+        self.stack.add_titled_with_icon(
+            self._build_step_configure(), "configure", "Configure", "preferences-other-symbolic")
+        self.stack.add_titled_with_icon(
+            self._build_step_deploy(), "deploy", "Deploy", "system-run-symbolic")
 
-        dots = Adw.CarouselIndicatorDots()
-        dots.set_carousel(self.carousel)
-        dots.set_margin_top(8)
+        switcher = Adw.ViewSwitcherBar()
+        switcher.set_stack(self.stack)
+        switcher.set_reveal(True)
 
-        # Navigation buttons — pinned to bottom via ToolbarView
         nav = Gtk.Box(spacing=8)
         nav.set_halign(Gtk.Align.CENTER)
-        nav.set_margin_top(8)
-        nav.set_margin_bottom(16)
+        nav.set_margin_top(4)
+        nav.set_margin_bottom(12)
 
         self.back_btn = Gtk.Button(label="Back")
         self.back_btn.set_sensitive(False)
@@ -73,20 +71,72 @@ class DeployWizardPage(Gtk.Box):
         nav.append(self.next_btn)
         nav.append(self.interrupt_btn)
 
-        carousel_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
-        carousel_box.set_vexpand(True)
-        carousel_box.append(dots)
-        carousel_box.append(self.carousel)
+        # Bottom bar — pinned via ToolbarView so it never scrolls away
+        bottom = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
+        bottom.append(switcher)
+        bottom.append(nav)
+
+        # Redirect Up from the bottom bar back into the step content
+        def _focus_step_content():
+            page = self.stack.get_visible_child()
+            if page:
+                page.child_focus(Gtk.DirectionType.TAB_BACKWARD)
+
+        bottom_key = Gtk.EventControllerKey()
+        def _on_bottom_key(_ctrl, keyval, _keycode, _state):
+            if keyval == Gdk.KEY_Up:
+                _focus_step_content()
+                return True
+            return False
+        bottom_key.connect("key-pressed", _on_bottom_key)
+        bottom.add_controller(bottom_key)
+
+        content_scroll = Gtk.ScrolledWindow()
+        content_scroll.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
+        content_scroll.set_vexpand(True)
+        content_scroll.set_child(self.stack)
 
         toolbar_view = Adw.ToolbarView()
-        toolbar_view.set_content(carousel_box)
-        toolbar_view.add_bottom_bar(nav)
-        toolbar_view.set_extend_content_to_bottom_edge(True)
+        toolbar_view.set_content(content_scroll)
+        toolbar_view.add_bottom_bar(bottom)
         toolbar_view.set_vexpand(True)
 
+        self._content_scroll = content_scroll
+        self.log_scroll = content_scroll
         self.append(toolbar_view)
 
-        self.carousel.connect("page-changed", self._on_page_changed)
+        self.stack.connect("notify::visible-child", self._on_page_changed)
+        self.connect("map", self._on_map_connect_focus)
+
+    def _on_map_connect_focus(self, _):
+        if getattr(self, "_focus_handler_connected", False):
+            return
+        root = self.get_root()
+        if root:
+            root.connect("notify::focus-widget", self._on_focus_changed)
+            self._focus_handler_connected = True
+
+    def _on_focus_changed(self, window, _param):
+        focused = window.get_focus()
+        if focused is None:
+            return
+        # Only act if the focused widget is inside our content scroll
+        parent = focused
+        while parent:
+            if parent is self._content_scroll:
+                break
+            parent = parent.get_parent()
+        else:
+            return
+        ok, bounds = focused.compute_bounds(self._content_scroll)
+        if not ok:
+            return
+        adj = self._content_scroll.get_vadjustment()
+        widget_center = bounds.get_y() + bounds.get_height() / 2
+        page_size = adj.get_page_size()
+        new_value = widget_center - page_size / 2
+        new_value = max(adj.get_lower(), min(adj.get_upper() - page_size, new_value))
+        adj.set_value(new_value)
 
     # ── Step 1: Select VM ────────────────────────────────────────────────────
 
@@ -95,7 +145,7 @@ class DeployWizardPage(Gtk.Box):
         self._vm_step_box.set_halign(Gtk.Align.CENTER)
         self._vm_step_box.set_size_request(520, -1)
         self._vm_step_box.set_margin_top(24)
-        self._vm_step_box.set_margin_bottom(72)
+        self._vm_step_box.set_margin_bottom(24)
         self._vm_step_box.set_margin_start(24)
         self._vm_step_box.set_margin_end(24)
 
@@ -145,6 +195,7 @@ class DeployWizardPage(Gtk.Box):
         if radio.get_active():
             self._selected_vm = vm
 
+
     # ── Step 2: Choose game ──────────────────────────────────────────────────
 
     def _build_step_game(self):
@@ -152,7 +203,7 @@ class DeployWizardPage(Gtk.Box):
         box.set_halign(Gtk.Align.CENTER)
         box.set_size_request(520, -1)
         box.set_margin_top(24)
-        box.set_margin_bottom(72)
+        box.set_margin_bottom(24)
         box.set_margin_start(24)
         box.set_margin_end(24)
 
@@ -197,7 +248,7 @@ class DeployWizardPage(Gtk.Box):
         self._configure_box.set_halign(Gtk.Align.CENTER)
         self._configure_box.set_size_request(520, -1)
         self._configure_box.set_margin_top(24)
-        self._configure_box.set_margin_bottom(72)
+        self._configure_box.set_margin_bottom(24)
         self._configure_box.set_margin_start(24)
         self._configure_box.set_margin_end(24)
 
@@ -208,34 +259,14 @@ class DeployWizardPage(Gtk.Box):
 
         note_label = Gtk.Label()
         note_label.set_markup(
-            "Server Name is used as the Docker container name and must be <b>unique across all VMs</b>. "
+            "Server Name is the Docker container name — must be <b>unique across all VMs</b>. "
             "Use only letters, numbers, and hyphens (e.g. <tt>mc-survival</tt>, <tt>factorio1</tt>)."
         )
         note_label.set_wrap(True)
         note_label.set_xalign(0)
         note_label.set_css_classes(["dim-label"])
-        note_label.set_margin_top(10)
-        note_label.set_margin_end(12)
-        note_label.set_margin_bottom(10)
-
-        note_icon = Gtk.Image.new_from_icon_name("dialog-information-symbolic")
-        note_icon.set_valign(Gtk.Align.START)
-        note_icon.set_margin_top(12)
-        note_icon.set_margin_start(12)
-        note_icon.set_margin_end(4)
-        note_icon.set_margin_bottom(10)
-
-        note_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
-        note_box.set_css_classes(["card"])
-
-        note_box.append(note_icon)
-        note_box.append(note_label)
-
-        expander = Gtk.Expander(label="Note: Server Name")
-        expander.set_expanded(True)
-        expander.set_child(note_box)
-        expander.set_margin_bottom(4)
-        self._configure_box.append(expander)
+        note_label.set_focusable(False)
+        self._configure_box.append(note_label)
 
         self._configure_group_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
         self._configure_box.append(self._configure_group_box)
@@ -285,12 +316,14 @@ class DeployWizardPage(Gtk.Box):
             self._mc_mode_row.set_text("survival")
             self._mc_difficulty_row.set_text("normal")
             self._mc_max_players_row.set_text("20")
-            mods_note = Adw.ActionRow(title="Mods & modpacks")
+            self._mc_whitelist_row = Adw.SwitchRow(title="Enable Whitelist",
+                                                    subtitle="Only whitelisted players can join")
+            mods_note = Adw.ActionRow(title="Mods &amp; modpacks")
             mods_note.set_subtitle("Add mods after deployment via the Modifications tab")
             mods_note.set_icon_name("dialog-information-symbolic")
             for row in [self._mc_type_row, self._mc_java_row, self._mc_version_row, self._mc_memory_row,
                         self._mc_mode_row, self._mc_difficulty_row,
-                        self._mc_max_players_row, mods_note]:
+                        self._mc_max_players_row, self._mc_whitelist_row, mods_note]:
                 group.add(row)
 
         elif self._selected_game == "valheim":
@@ -334,8 +367,9 @@ class DeployWizardPage(Gtk.Box):
     def _build_step_deploy(self):
         box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=16)
         box.set_hexpand(True)
+        box.set_vexpand(True)
         box.set_margin_top(24)
-        box.set_margin_bottom(72)
+        box.set_margin_bottom(24)
         box.set_margin_start(24)
         box.set_margin_end(24)
 
@@ -344,20 +378,18 @@ class DeployWizardPage(Gtk.Box):
         label.set_halign(Gtk.Align.START)
         box.append(label)
 
-        scroll = Gtk.ScrolledWindow()
-        scroll.set_vexpand(True)
-        scroll.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.AUTOMATIC)
-
         self.log_buffer = Gtk.TextBuffer()
         self.log_view = Gtk.TextView(buffer=self.log_buffer)
         self.log_view.set_editable(False)
+        self.log_view.set_focusable(False)
         self.log_view.set_monospace(True)
+        self.log_view.set_vexpand(True)
         self.log_view.set_css_classes(["card"])
         self.log_view.set_wrap_mode(Gtk.WrapMode.WORD_CHAR)
 
-        scroll.set_child(self.log_view)
-        self.log_scroll = scroll
-        box.append(scroll)
+        box.append(self.log_view)
+        # assigned after _content_scroll is created in _build_ui
+        self.log_scroll = None
 
         return box
 
@@ -409,20 +441,34 @@ class DeployWizardPage(Gtk.Box):
         dialog.add_response("ok", "OK")
         dialog.present(self)
 
-    def _on_page_changed(self, carousel, idx):
+    def _current_idx(self):
+        name = self.stack.get_visible_child_name()
+        return self._step_names.index(name) if name in self._step_names else 0
+
+    def _on_page_changed(self, _stack, _param):
+        idx = self._current_idx()
         if idx == 0:
             self._populate_vm_list()
         self.back_btn.set_sensitive(idx > 0)
-        total = carousel.get_n_pages()
-        if idx == total - 1:
+        if idx == len(self._step_names) - 1:
             self.next_btn.set_label("Deploy")
-            self.next_btn.set_css_classes(["suggested-action"])
         else:
             self.next_btn.set_label("Next")
 
+    def _find_listbox(self, widget):
+        if isinstance(widget, Gtk.ListBox):
+            return widget
+        child = widget.get_first_child()
+        while child:
+            found = self._find_listbox(child)
+            if found:
+                return found
+            child = child.get_next_sibling()
+        return None
+
     def _go_next(self, _btn):
-        idx = int(self.carousel.get_position())
-        total = self.carousel.get_n_pages()
+        idx = self._current_idx()
+        total = len(self._step_names)
 
         if idx == total - 1:
             err = self._validate_configure()
@@ -434,18 +480,15 @@ class DeployWizardPage(Gtk.Box):
             )
             return
 
-        # Validate step 1
         if idx == 0 and self._selected_vm is None:
             return
 
-        next_page = self.carousel.get_nth_page(idx + 1)
-        self.carousel.scroll_to(next_page, True)
+        self.stack.set_visible_child_name(self._step_names[idx + 1])
 
     def _go_back(self, _btn):
-        idx = int(self.carousel.get_position())
+        idx = self._current_idx()
         if idx > 0:
-            prev_page = self.carousel.get_nth_page(idx - 1)
-            self.carousel.scroll_to(prev_page, True)
+            self.stack.set_visible_child_name(self._step_names[idx - 1])
 
     # ── Deploy ───────────────────────────────────────────────────────────────
 
@@ -526,6 +569,7 @@ class DeployWizardPage(Gtk.Box):
             extra_vars["minecraft_mode"]       = self._mc_mode_row.get_text().strip()
             extra_vars["minecraft_difficulty"] = self._mc_difficulty_row.get_text().strip()
             extra_vars["minecraft_max_players"]= self._mc_max_players_row.get_text().strip()
+            extra_vars["minecraft_whitelist"]  = "true" if self._mc_whitelist_row.get_active() else "false"
         elif game == "valheim":
             extra_vars["valheim_world_name"]   = self._vh_world_row.get_text().strip()
             extra_vars["valheim_server_pass"]  = self._vh_pass_row.get_text()

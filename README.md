@@ -1,6 +1,14 @@
 # GSDeploy
 
-GSDeploy is a desktop application for deploying and monitoring game servers on virtual machines using Ansible and Docker.
+![Python](https://img.shields.io/badge/Python-3.10+-blue)
+![Ansible](https://img.shields.io/badge/Ansible-automation-red)
+![Docker](https://img.shields.io/badge/Docker-containers-2496ED)
+![GTK4](https://img.shields.io/badge/GTK4-libadwaita-4A90D9)
+![License](https://img.shields.io/badge/License-GPL%20v3-green)
+
+> **Homelab project:** GSDeploy is designed for home networks behind NAT — running game servers on your own hardware or local VMs. It can work with cloud VPS providers, but requires careful firewall configuration. It is not intended for production environments or large-scale deployments.
+
+GSDeploy is a desktop application for deploying and monitoring game servers on remote machines using Ansible and Docker. The target machine can be a virtual machine, a physical server, a repurposed PC, or a cloud VPS — anything running a supported Linux OS with SSH access.
 
 It provides a simple GUI for managing infrastructure and deploying game servers without manual configuration.
 
@@ -39,6 +47,12 @@ Your computer               Gameserver VM
 - Real-time Docker log viewer per server
 - GTK4 desktop interface
 
+> **Credits:** Game server containers are powered by community-maintained Docker images:
+> [itzg/minecraft-server](https://github.com/itzg/docker-minecraft-server),
+> [lloesche/valheim-server](https://github.com/lloesche/valheim-server-docker),
+> [quartzar/vintage-story-server](https://hub.docker.com/r/quartzar/vintage-story-server),
+> [factoriotools/factorio](https://github.com/factoriotools/factorio-docker).
+
 ---
 
 ## System Requirements
@@ -49,6 +63,8 @@ Your computer               Gameserver VM
 - Linux Mint 22 or newer
 - Python 3.10+
 - SSH access to target VMs
+- ~350 MB disk space (installed)
+- ~100-150 MB RAM at idle, up to ~350 MB during provisioning/deployment (rough estimates)
 
 > **Note:** Requires libadwaita 1.4+. Ubuntu 22.04/23.04 and Debian 12 ship older versions and are not supported.
 > WSL2 is not recommended — GTK4 GUI support is limited.
@@ -72,6 +88,8 @@ Your computer               Gameserver VM
 > **Note:** Do not create a separate `/home` partition. Game servers are installed
 > under `/opt/gameservers/` — all disk space should be available to the root `/` partition.
 
+> **Local VM networking:** When using VMware or VirtualBox, set the VM network adapter to **Bridged** mode. This gives the VM its own IP on your local network, making it directly reachable from GSDeploy without any port forwarding. Network adapter's NAT mode requires additional port forwarding configuration and is not recommended.
+
 ### Per-Game Requirements
 
 | Game | Min RAM | Min Disk |
@@ -84,6 +102,37 @@ Your computer               Gameserver VM
 
 ---
 
+## Using VMs on a Different Network
+
+> **Design assumption:** GSDeploy is designed for home networks behind NAT, where the local network is trusted and monitoring ports are not reachable from the internet. The provisioning process configures UFW to deny all incoming traffic except SSH, game ports, and monitoring ports — but this only protects the VM itself. If your VM is on a cloud provider (Hetzner, AWS, etc.) without additional firewall rules, monitoring ports with no authentication or TLS could be exposed to the internet. **Always configure your cloud provider's firewall in addition to UFW.**
+
+GSDeploy works with any IPv4 address — local, VPN, or public. Enter the VM's reachable IP
+when adding it and SSH access is all that is needed for provisioning and deployment. IPv6 is not currently supported.
+
+**Cloud VPS / public IP (Hetzner, AWS, DigitalOcean, etc.)**
+
+Cloud providers have their own firewall layer **on top of** UFW. GSDeploy configures UFW on the VM, but you must also open the same ports in your cloud provider's firewall (Hetzner Firewall, AWS Security Groups, etc.) — UFW alone is not enough.
+
+| Port | Open to | Reason |
+|---|---|---|
+| 22 | Your IP only | SSH for provisioning and deployment |
+| Game port (e.g. 25565) | Everyone | Players connecting to the server |
+| 3000 | Your IP only | Grafana (if you need remote access) |
+| 9090, 3100, 9100, 8080 | Nobody | No authentication — never expose publicly |
+
+> **Note:** If your home IP changes, you will need to update the SSH rule in the cloud firewall before you can provision or deploy again.
+
+> **Grafana over public internet:** Grafana runs plain HTTP with no TLS — credentials travel unencrypted. Restrict it to your IP only, or put a reverse proxy (e.g. nginx + Let's Encrypt) in front of it if broader access is needed.
+
+**VMs behind NAT (different LAN / home router)**
+- Forward port 22 on the router to the VM for SSH access during provisioning/deployment
+- Forward the game port(s) for players to connect
+
+**VPN (e.g. Tailscale, WireGuard)**
+- Assign VMs a VPN IP and use that — no port forwarding needed, monitoring ports stay private
+
+---
+
 ## Installation
 
 ### Option A — Install from .deb package (recommended)
@@ -91,10 +140,12 @@ Your computer               Gameserver VM
 Download the latest `.deb` from [GitHub Releases](../../releases/latest), then:
 
 ```bash
-sudo apt install ./gsdeploy_1.0.0.deb
+sudo apt install ./gsdeploy_X.X.X.deb
 ```
 
 Launch from your application menu or run `gsdeploy` in a terminal.
+
+> Make sure you have an SSH key set up before using GSDeploy — see step 3 in Option B below.
 
 ### Option B — Run from source
 
@@ -171,15 +222,21 @@ In the **Virtual Machines** tab, add a VM with:
 ### 2. Provision the VM
 
 Click the provision button on the VM row. This connects to your existing VM via
-password-based SSH, creates the admin user, installs Docker and monitoring agents,
+password-based SSH, creates the admin user, installs Docker, node_exporter, and cAdvisor,
 then switches all future connections to use the admin user and your SSH key.
+
+> **Tip:** If you plan to use monitoring, add and provision the monitoring VM **before** provisioning
+> game server VMs. This way promtail (log shipping) is automatically configured on game server VMs
+> during provisioning. If you provision game server VMs first, you can re-provision them afterwards
+> to add promtail.
 
 ### 3. Deploy Monitoring (optional)
 
-Click **Deploy Monitoring** on the monitoring VM row. Only needs to be done once per monitoring VM.
+Click **Deploy Monitoring** on the monitoring VM row. This deploys Prometheus, Loki, and Grafana.
+Re-run it any time you change monitoring configuration.
 
-If a monitoring VM is configured, promtail (log shipping) and metrics exporters are automatically
-set up on game server VMs during provisioning.
+If a monitoring VM is configured before provisioning, promtail is automatically set up on game
+server VMs to ship logs to Loki.
 
 Accessible at:
 - Grafana: `http://<monitoring-ip>:3000`
@@ -194,7 +251,9 @@ configure settings, and deploy.
 ### 5. Manage Servers
 
 The **Dashboard** shows all deployed servers. From there you can start/stop containers,
-view live Docker logs, view the deployment config, or remove a server.
+view live Docker logs, view the deployment config, or remove a server. Removing a server
+stops and removes the Docker container on the VM but leaves the data directory intact at
+`/opt/gameservers/<server-name>/`.
 
 ### 6. Transfer Mods and Maps
 
@@ -214,7 +273,7 @@ to a game server VM using rsync over SSH.
 | Game Mode | `survival` | `survival`, `creative`, `adventure` |
 | Difficulty | `normal` | `peaceful`, `easy`, `normal`, `hard` |
 | Max Players | `20` | Maximum concurrent players |
-| Server Type | `VANILLA` | `VANILLA`, `FORGE`, `FABRIC`, `PAPER`, etc. |
+| Server Type | `VANILLA` | `VANILLA`, `FORGE`, `NEOFORGE`, `FABRIC`, `PAPER`, `SPIGOT`, `QUILT` |
 
 > For modded servers (Forge, Fabric): place mods in the **Modifications** tab after deployment,
 > then restart the server from the Dashboard.
@@ -232,6 +291,7 @@ to a game server VM using rsync over SSH.
 |---|---|---|
 | Version | `latest` | Server version |
 | Game Port | `42420` | Port players connect to |
+| Max Players | `16` | Maximum concurrent players |
 
 ### Factorio
 
@@ -239,6 +299,7 @@ to a game server VM using rsync over SSH.
 |---|---|---|
 | Version | `latest` | Server version |
 | Game Port | `34197` | UDP port players connect to |
+| Max Players | `0` | Maximum concurrent players (0 = unlimited) |
 
 ---
 
@@ -246,11 +307,30 @@ to a game server VM using rsync over SSH.
 
 Stored on the VM at `/opt/gameservers/<server-name>/`:
 
+**Minecraft**
 ```
-data/      — world data and server files
-mods/      — mods (Minecraft)
-plugins/   — plugins (Minecraft)
-world/     — world files (Minecraft)
+data/          — server root
+data/mods/     — mod files (Forge, Fabric)
+data/plugins/  — plugin files (Paper, Spigot)
+data/world/    — world save files
+```
+
+**Valheim**
+```
+config/    — server configuration
+data/      — world saves (created by container on first start)
+```
+
+**Vintage Story**
+```
+data/          — world saves and server data
+data/config/   — server configuration files
+```
+
+**Factorio**
+```
+data/          — saves and server data
+data/config/   — server configuration files
 ```
 
 ---
@@ -267,31 +347,7 @@ world/     — world files (Minecraft)
 | Promtail | Log shipping to Loki | — |
 | mc-monitor | Minecraft server metrics | game port + 1000 |
 
-> **Security warning:** Prometheus (9090), Loki (3100), and the exporter ports (9100, 8080) have no
-> authentication. If your VM has a public IP, restrict these ports to your IP only using
-> the VM's firewall or cloud security group rules. Grafana (3000) is safe to expose as it
-> has login protection.
-
----
-
-## Using VMs on a Different Network
-
-GSDeploy works with any IP address — local, VPN, or public. Enter the VM's reachable IP
-when adding it and SSH access is all that is needed for provisioning and deployment.
-
-**Cloud VPS / public IP**
-- SSH (port 22) must be open from your machine
-- Game ports must be open for players to connect (GSDeploy opens them in UFW on the VM,
-  but your cloud provider's firewall/security group also needs to allow them)
-- **Firewall the monitoring ports** (9090, 3100, 9100, 8080) — they have no authentication
-  and must not be publicly accessible
-
-**VMs behind NAT (different LAN / home router)**
-- Forward port 22 on the router to the VM for SSH access during provisioning/deployment
-- Forward the game port(s) for players to connect
-
-**VPN (e.g. Tailscale, WireGuard)**
-- Assign VMs a VPN IP and use that — no port forwarding needed, monitoring ports stay private
+> **Security warning:** Prometheus, Loki, and the exporter ports have no authentication and Grafana runs plain HTTP. See [Using VMs on a Different Network](#using-vms-on-a-different-network) for firewall recommendations.
 
 ---
 
@@ -319,3 +375,60 @@ sudo apt install ansible
 - Confirm the initial SSH user exists on the VM
 - Ensure the VM allows password-based SSH login initially
 - Check the SSH key path is correct
+
+---
+
+## Tech Stack
+
+| Component | Technology |
+|---|---|
+| GUI | Python, GTK4, libadwaita |
+| Automation | Ansible |
+| Game servers | Docker, Docker Compose |
+| Monitoring | Prometheus, Grafana, Loki, Promtail, cAdvisor, Node Exporter |
+| Database | SQLite |
+| Container log shipping | Loki Docker logging plugin |
+| File transfer | rsync over SSH |
+
+---
+
+## Repository Structure
+
+```
+/loputoo
+├── gsdeploy/              # Python application source
+│   ├── pages/             # UI pages (Dashboard, Deploy, VM Manager, etc.)
+│   ├── ansible_runner.py  # Ansible playbook execution and inventory management
+│   ├── database.py        # SQLite database and migrations
+│   ├── application.py     # App entry point
+│   └── window.py          # Main window and navigation
+├── playbooks/             # Ansible playbooks (provision, deploy, monitoring)
+├── roles/                 # Ansible roles (docker, gameserver, grafana, etc.)
+├── group_vars/            # Shared Ansible variables and vault
+├── packaging/             # .deb package build scripts and metadata
+└── requirements.txt       # Ansible Galaxy collections
+```
+
+---
+
+## Contributing
+
+Contributions are welcome. To contribute:
+
+1. Fork the repository and clone your fork
+2. Create a feature branch: `git checkout -b feat/your-feature`
+3. Make your changes and test them locally
+4. Use clear commit messages:
+   - `feat:` — new feature
+   - `fix:` — bug fix
+   - `docs:` — documentation update
+   - `refactor:` — code restructuring
+5. Open a Pull Request with a description of your changes
+
+Please keep PRs focused — one feature or fix per PR.
+
+---
+
+## License
+
+This project is licensed under the [GNU General Public License v3.0](LICENSE).

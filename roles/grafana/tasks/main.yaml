@@ -59,6 +59,7 @@
   loop:
     - gameservers.json
     - nodes.json
+    - minecraft.json
   notify: restart grafana container
 
 - name: Run Grafana container

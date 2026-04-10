@@ -136,7 +136,7 @@ class DashboardPage(Gtk.Box):
                 files_btn.connect("clicked", self._on_open_files, dict(srv), dict(vm))
                 row.add_suffix(files_btn)
 
-                if srv["game_type"] in ("minecraft", "vintagestory"):
+                if srv["game_type"] in ("minecraft", "vintagestory", "factorio"):
                     console_btn = Gtk.Button(icon_name="input-keyboard-symbolic")
                     console_btn.set_css_classes(["flat"])
                     console_btn.set_valign(Gtk.Align.CENTER)
@@ -213,6 +213,7 @@ class DashboardPage(Gtk.Box):
             container=srv["name"],
             action="start",
             done_callback=on_done,
+            game_type=srv["game_type"],
         )
 
     def _on_stop(self, _btn, srv, vm, play_btn, stop_btn, restart_btn):
@@ -342,7 +343,7 @@ class DashboardPage(Gtk.Box):
         key = os.path.expanduser(vm["ssh_key"])
         ssh_cmd = [
             "ssh", "-i", key, "-t",
-            "-o", "StrictHostKeyChecking=no",
+            "-o", "StrictHostKeyChecking=accept-new",
             f"{vm['ssh_user']}@{vm['ip']}",
             f"cd /opt/gameservers/{shlex.quote(srv['name'])} && bash",
         ]
@@ -357,7 +358,7 @@ class DashboardPage(Gtk.Box):
                 f"echo {shlex.quote(vm['admin_password'])} | sudo -S true 2>/dev/null && "
                 f"sudo docker exec -it {shlex.quote(srv['name'])} rcon-cli"
             )
-        else:  # vintagestory — show recent log history then attach for live I/O
+        else:  # vintagestory / factorio — show recent log history then attach for live I/O
             remote_cmd = (
                 f"echo {shlex.quote(vm['admin_password'])} | sudo -S true 2>/dev/null && "
                 f"sudo docker logs --tail 100 {shlex.quote(srv['name'])} 2>&1; "
@@ -365,7 +366,7 @@ class DashboardPage(Gtk.Box):
             )
         ssh_cmd = [
             "ssh", "-i", key, "-t",
-            "-o", "StrictHostKeyChecking=no",
+            "-o", "StrictHostKeyChecking=accept-new",
             f"{vm['ssh_user']}@{vm['ip']}",
             remote_cmd,
         ]

@@ -136,6 +136,11 @@ def _get_monitoring_ip():
         return ""
 
 
+def _debug_flag():
+    from gsdeploy.database import get_setting
+    return ["-v"] if get_setting("ansible_debug", "0") == "1" else []
+
+
 def _run_playbook(cmd, env, become_pass, log_callback, done_callback):
     """
     Run an Ansible playbook in a background thread, streaming output.
@@ -149,7 +154,7 @@ def _run_playbook(cmd, env, become_pass, log_callback, done_callback):
             tf_path = tf.name
         try:
             proc = subprocess.Popen(
-                cmd + ["-i", INVENTORY, "--become-password-file", tf_path],
+                cmd + _debug_flag() + ["-i", INVENTORY, "--become-password-file", tf_path],
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT,
                 text=True,
@@ -175,6 +180,19 @@ def _run_playbook(cmd, env, become_pass, log_callback, done_callback):
     return cancel
 
 
+def _get_monitoring_become_pass():
+    """Get the monitoring VM's admin password from the database."""
+    from gsdeploy.database import get_connection
+    try:
+        with get_connection() as conn:
+            row = conn.execute(
+                "SELECT admin_password FROM vms WHERE vm_type = 'monitoring' LIMIT 1"
+            ).fetchone()
+            return row["admin_password"] if row else ""
+    except Exception:
+        return ""
+
+
 def run_deploy_gameserver(vm_name, game_type, server_name, port, admin_username,
                           extra_vars, become_pass, log_callback, done_callback):
     """
@@ -190,6 +208,11 @@ def run_deploy_gameserver(vm_name, game_type, server_name, port, admin_username,
         "monitoring_host_ip": _get_monitoring_ip(),
     }
     extra.update(extra_vars)
+
+    # Pass monitoring VM's become password via extra vars so Ansible can sudo on it
+    monitoring_become = _get_monitoring_become_pass()
+    if monitoring_become:
+        extra["monitoring_become_pass"] = monitoring_become
 
     env = _ansible_env()
     cmd = ["ansible-playbook", os.path.join(PLAYBOOK_DIR, "deploy_gameserver.yml")]
@@ -211,8 +234,6 @@ def run_provision_vm(hostname, ip, initial_user, initial_ssh_pass, admin_usernam
     monitoring_ip = _get_monitoring_ip()
 
     def _run():
-        GLib.idle_add(log_callback,
-                      f"[gsdeploy] monitoring_host_ip resolved to: '{monitoring_ip}'\n")
         with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as tf:
             tf.write(f"initial_ssh_pass: '{initial_ssh_pass}'\n")
             tf.write(f"initial_become_pass: '{initial_ssh_pass}'\n")
@@ -229,7 +250,7 @@ def run_provision_vm(hostname, ip, initial_user, initial_ssh_pass, admin_usernam
                        f"admin_username={admin_username} deployer_ssh_key={deployer_ssh_key} "
                        f"monitoring_host_ip={monitoring_ip}"),
                 "-e", f"@{tf_path}",
-            ]
+            ] + _debug_flag()
             proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                                     text=True, env=env)
             proc_ref[0] = proc
@@ -267,7 +288,7 @@ def run_remove_gameserver(vm_name, server_name, become_pass, log_callback, done_
     return _run_playbook(cmd, env, become_pass, log_callback, done_callback)
 
 
-def docker_action(ip, ssh_user, ssh_key, admin_password, container, action, done_callback):
+def docker_action(ip, ssh_user, ssh_key, admin_password, container, action, done_callback, game_type=None):
     """
     Run `docker start` or `docker stop` on a remote container over SSH.
     action: "start" or "stop"
@@ -276,22 +297,34 @@ def docker_action(ip, ssh_user, ssh_key, admin_password, container, action, done
 
     def _run():
         key = os.path.expanduser(ssh_key)
-        monitor = shlex.quote(container + "_monitor")
         main = shlex.quote(container)
+        has_monitor = game_type == "minecraft"
+        monitor = shlex.quote(container + "_monitor")
         if action == "stop":
-            # Stop monitor immediately, give main server up to 60s to save
-            remote_cmd = (
-                f"echo {shlex.quote(admin_password)} | sudo -S sh -c "
-                f"'docker stop --time 2 {monitor} 2>/dev/null; docker stop --time 60 {main}'"
-            )
+            if has_monitor:
+                remote_cmd = (
+                    f"echo {shlex.quote(admin_password)} | sudo -S sh -c "
+                    f"'docker stop --time 2 {monitor} 2>/dev/null; docker stop --time 60 {main}'"
+                )
+            else:
+                remote_cmd = (
+                    f"echo {shlex.quote(admin_password)} | sudo -S sh -c "
+                    f"'docker stop --time 60 {main}'"
+                )
         else:
-            remote_cmd = (
-                f"echo {shlex.quote(admin_password)} | sudo -S sh -c "
-                f"'docker start {main} {monitor}'"
-            )
+            if has_monitor:
+                remote_cmd = (
+                    f"echo {shlex.quote(admin_password)} | sudo -S sh -c "
+                    f"'docker start {main} {monitor}'"
+                )
+            else:
+                remote_cmd = (
+                    f"echo {shlex.quote(admin_password)} | sudo -S sh -c "
+                    f"'docker start {main}'"
+                )
         cmd = [
             "ssh", "-i", key,
-            "-o", "StrictHostKeyChecking=no",
+            "-o", "StrictHostKeyChecking=accept-new",
             "-o", "BatchMode=yes",
             "-o", "ServerAliveInterval=10",
             "-o", "ServerAliveCountMax=12",
@@ -329,7 +362,7 @@ def get_container_status(ip, ssh_user, ssh_key, admin_password, container, done_
         )
         cmd = [
             "ssh", "-i", key,
-            "-o", "StrictHostKeyChecking=no",
+            "-o", "StrictHostKeyChecking=accept-new",
             "-o", "BatchMode=yes",
             f"{ssh_user}@{ip}",
             remote_cmd,
@@ -357,7 +390,7 @@ def stream_docker_logs(ip, ssh_user, ssh_key, admin_password, container, log_cal
         remote_cmd = f"echo {shlex.quote(admin_password)} | sudo -S docker logs -f -t {shlex.quote(container)}"
         cmd = [
             "ssh", "-i", key,
-            "-o", "StrictHostKeyChecking=no",
+            "-o", "StrictHostKeyChecking=accept-new",
             "-o", "BatchMode=yes",
             f"{ssh_user}@{ip}",
             remote_cmd,
@@ -400,7 +433,7 @@ def transfer_files(local_path, ip, ssh_user, ssh_key, remote_dest,
         src = local_path.rstrip("/") + "/" if os.path.isdir(local_path) else local_path
         cmd = [
             "rsync", "-avz", "--progress",
-            "-e", f"ssh -i {key} -o StrictHostKeyChecking=no -o BatchMode=yes",
+            "-e", f"ssh -i {key} -o StrictHostKeyChecking=accept-new -o BatchMode=yes",
             src,
             f"{ssh_user}@{ip}:{remote_dest}",
         ]
@@ -433,7 +466,7 @@ def get_public_ip(ip, ssh_user, ssh_key, done_callback):
         key = os.path.expanduser(ssh_key)
         cmd = [
             "ssh", "-i", key,
-            "-o", "StrictHostKeyChecking=no",
+            "-o", "StrictHostKeyChecking=accept-new",
             "-o", "BatchMode=yes",
             "-o", "ConnectTimeout=10",
             f"{ssh_user}@{ip}",

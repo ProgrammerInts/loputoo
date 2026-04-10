@@ -7,17 +7,32 @@ BUILD_DIR="$SCRIPT_DIR/build"
 APP_DIR="$BUILD_DIR/usr/share/gsdeploy"
 VERSION_FILE="$SCRIPT_DIR/version"
 
-# Read and increment patch version (first run starts at 1.0.0 without incrementing)
+# Read current version
 if [ -f "$VERSION_FILE" ]; then
     VERSION=$(cat "$VERSION_FILE")
-    MAJOR=$(echo "$VERSION" | cut -d. -f1)
-    MINOR=$(echo "$VERSION" | cut -d. -f2)
-    PATCH=$(echo "$VERSION" | cut -d. -f3)
-    PATCH=$((PATCH + 1))
-    VERSION="$MAJOR.$MINOR.$PATCH"
 else
     VERSION="1.0.0"
 fi
+
+MAJOR=$(echo "$VERSION" | cut -d. -f1)
+MINOR=$(echo "$VERSION" | cut -d. -f2)
+PATCH=$(echo "$VERSION" | cut -d. -f3)
+
+echo "Current version: $VERSION"
+echo "Bump version:"
+echo "  1) Major ($MAJOR -> $((MAJOR + 1)).0.0)"
+echo "  2) Minor ($MAJOR.$MINOR -> $MAJOR.$((MINOR + 1)).0)"
+echo "  3) Patch ($VERSION -> $MAJOR.$MINOR.$((PATCH + 1)))"
+read -rp "Choice [1/2/3]: " BUMP
+
+case "$BUMP" in
+    1) MAJOR=$((MAJOR + 1)); MINOR=0; PATCH=0 ;;
+    2) MINOR=$((MINOR + 1)); PATCH=0 ;;
+    3) PATCH=$((PATCH + 1)) ;;
+    *) echo "Invalid choice. Aborting."; exit 1 ;;
+esac
+
+VERSION="$MAJOR.$MINOR.$PATCH"
 echo "$VERSION" > "$VERSION_FILE"
 
 echo "Building version $VERSION..."

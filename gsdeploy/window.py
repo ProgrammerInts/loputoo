@@ -9,6 +9,7 @@ from gsdeploy.pages.vm_manager import VMManagerPage
 from gsdeploy.pages.deploy_wizard import DeployWizardPage
 from gsdeploy.pages.mods_maps import ModsMapsPage
 from gsdeploy.pages.monitoring import MonitoringPage
+from gsdeploy.pages.settings import SettingsPage
 
 
 NAV_ITEMS = [
@@ -18,6 +19,7 @@ NAV_ITEMS = [
     ("Deploy Server",    "system-run-symbolic",              DeployWizardPage),
     ("Modifications",    "folder-symbolic",                  ModsMapsPage),
     ("Monitoring",       "utilities-system-monitor-symbolic", MonitoringPage),
+    ("Settings",         "preferences-system-symbolic",      SettingsPage),
 ]
 
 

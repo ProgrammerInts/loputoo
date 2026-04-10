@@ -1,0 +1,152 @@
+{
+  "title": "Minecraft Servers",
+  "uid": "minecraft",
+  "tags": ["gsdeploy"],
+  "timezone": "browser",
+  "schemaVersion": 38,
+  "refresh": "10s",
+  "time": {
+    "from": "now-1h",
+    "to": "now"
+  },
+  "panels": [
+    {
+      "type": "stat",
+      "title": "Server Status",
+      "gridPos": { "h": 4, "w": 24, "x": 0, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "prometheus_ds" },
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"] },
+        "orientation": "horizontal",
+        "textMode": "value_and_name",
+        "colorMode": "background"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "1": { "text": "ONLINE", "color": "green", "index": 0 },
+                "0": { "text": "OFFLINE", "color": "red", "index": 1 }
+              }
+            }
+          ],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "red", "value": null },
+              { "color": "green", "value": 1 }
+            ]
+          }
+        }
+      },
+      "targets": [
+        {
+          "expr": "mc_status_query_status",
+          "legendFormat": "{{server}}"
+        }
+      ]
+    },
+    {
+      "type": "stat",
+      "title": "Players Online",
+      "gridPos": { "h": 4, "w": 12, "x": 0, "y": 4 },
+      "datasource": { "type": "prometheus", "uid": "prometheus_ds" },
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"] },
+        "orientation": "horizontal",
+        "textMode": "value_and_name",
+        "colorMode": "value"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "blue", "value": null }
+            ]
+          }
+        }
+      },
+      "targets": [
+        {
+          "expr": "mc_status_query_players_online",
+          "legendFormat": "{{server}}"
+        }
+      ]
+    },
+    {
+      "type": "stat",
+      "title": "Max Players",
+      "gridPos": { "h": 4, "w": 12, "x": 12, "y": 4 },
+      "datasource": { "type": "prometheus", "uid": "prometheus_ds" },
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"] },
+        "orientation": "horizontal",
+        "textMode": "value_and_name",
+        "colorMode": "value"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "text", "value": null }
+            ]
+          }
+        }
+      },
+      "targets": [
+        {
+          "expr": "mc_status_query_players_max",
+          "legendFormat": "{{server}}"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Players Online Over Time",
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 8 },
+      "datasource": { "type": "prometheus", "uid": "prometheus_ds" },
+      "fieldConfig": {
+        "defaults": {
+          "min": 0,
+          "custom": { "fillOpacity": 20 }
+        }
+      },
+      "targets": [
+        {
+          "expr": "mc_status_query_players_online",
+          "legendFormat": "{{server}}"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Server Response Time (ms)",
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 16 },
+      "datasource": { "type": "prometheus", "uid": "prometheus_ds" },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ms",
+          "min": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 200 },
+              { "color": "red", "value": 500 }
+            ]
+          }
+        }
+      },
+      "targets": [
+        {
+          "expr": "mc_status_query_response_time_ms",
+          "legendFormat": "{{server}}"
+        }
+      ]
+    }
+  ]
+}
