@@ -152,7 +152,7 @@ class DashboardPage(Gtk.Box):
                 row.add_suffix(info_btn)
 
                 remove_btn = Gtk.Button(icon_name="user-trash-symbolic")
-                remove_btn.set_css_classes(["flat", "destructive-action"])
+                remove_btn.set_css_classes(["flat"])
                 remove_btn.set_valign(Gtk.Align.CENTER)
                 remove_btn.set_tooltip_text("Remove server")
                 remove_btn.connect("clicked", self._on_remove, dict(srv), dict(vm))

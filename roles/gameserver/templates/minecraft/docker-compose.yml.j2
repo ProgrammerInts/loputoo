@@ -15,7 +15,7 @@ services:
       MOTD: "{{ minecraft_motd | default(server_name) }}"
       LEVEL_SEED: "{{ minecraft_seed | default('') }}"
       MODE: "{{ minecraft_mode | default('survival') }}"
-      WHITELIST: "{{ minecraft_whitelist | default('false') }}"
+      ENABLE_WHITELIST: "{{ minecraft_whitelist | default('false') }}"
       ENABLE_RCON: "true"
       RCON_PASSWORD: "{{ minecraft_rcon_password | default('rconpassword') }}"
       RCON_PORT: "25575"
@@ -43,7 +43,7 @@ services:
     image: itzg/mc-monitor:latest
     container_name: "{{ server_name }}_monitor"
     restart: unless-stopped
-    command: export-for-prometheus -servers {{ server_name }}:25565
+    command: export-for-prometheus -servers {{ server_name }}:{{ server_port | default(25565) }}
     ports:
       - "{{ server_port | default(25565) | int + 1000 }}:8080"
     depends_on:

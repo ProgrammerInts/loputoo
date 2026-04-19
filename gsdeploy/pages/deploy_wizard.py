@@ -328,11 +328,14 @@ class DeployWizardPage(Gtk.Box):
 
         elif self._selected_game == "valheim":
             self._port_row.set_text("2456")
-            self._vh_world_row = Adw.EntryRow(title="World Name")
-            self._vh_pass_row  = Adw.PasswordEntryRow(title="Server Password")
+            self._vh_world_row  = Adw.EntryRow(title="World Name")
+            self._vh_pass_row   = Adw.PasswordEntryRow(title="Server Password")
+            self._vh_memory_row = Adw.EntryRow(title="Memory Limit")
             self._vh_world_row.set_text("Dedicated")
+            self._vh_memory_row.set_text("6G")
             group.add(self._vh_world_row)
             group.add(self._vh_pass_row)
+            group.add(self._vh_memory_row)
 
         elif self._selected_game == "vintagestory":
             self._port_row.set_text("42420")
@@ -340,11 +343,13 @@ class DeployWizardPage(Gtk.Box):
             self._vs_world_row       = Adw.EntryRow(title="World Name")
             self._vs_max_players_row = Adw.EntryRow(title="Max Players")
             self._vs_pass_row        = Adw.PasswordEntryRow(title="Server Password (optional)")
+            self._vs_memory_row      = Adw.EntryRow(title="Memory Limit")
             self._vs_version_row.set_text("1.21.6")
             self._vs_world_row.set_text("Default")
             self._vs_max_players_row.set_text("16")
+            self._vs_memory_row.set_text("4G")
             for row in [self._vs_version_row, self._vs_world_row,
-                        self._vs_max_players_row, self._vs_pass_row]:
+                        self._vs_max_players_row, self._vs_pass_row, self._vs_memory_row]:
                 group.add(row)
 
         elif self._selected_game == "factorio":
@@ -354,10 +359,12 @@ class DeployWizardPage(Gtk.Box):
             self._fac_desc_row        = Adw.EntryRow(title="Description (optional)")
             self._fac_max_players_row = Adw.EntryRow(title="Max Players (0 = unlimited)")
             self._fac_pass_row        = Adw.PasswordEntryRow(title="Server Password (optional)")
+            self._fac_memory_row      = Adw.EntryRow(title="Memory Limit")
             self._fac_version_row.set_text("stable")
             self._fac_max_players_row.set_text("0")
+            self._fac_memory_row.set_text("3G")
             for row in [self._fac_version_row, self._fac_save_row, self._fac_desc_row,
-                        self._fac_max_players_row, self._fac_pass_row]:
+                        self._fac_max_players_row, self._fac_pass_row, self._fac_memory_row]:
                 group.add(row)
 
         self._configure_group_box.append(group)
@@ -573,17 +580,20 @@ class DeployWizardPage(Gtk.Box):
         elif game == "valheim":
             extra_vars["valheim_world_name"]   = self._vh_world_row.get_text().strip()
             extra_vars["valheim_server_pass"]  = self._vh_pass_row.get_text()
+            extra_vars["valheim_memory"]       = self._vh_memory_row.get_text().strip()
         elif game == "vintagestory":
             extra_vars["vs_version"]           = self._vs_version_row.get_text().strip()
             extra_vars["vs_world_name"]        = self._vs_world_row.get_text().strip()
             extra_vars["vs_max_clients"]       = self._vs_max_players_row.get_text().strip()
             extra_vars["vs_password"]          = self._vs_pass_row.get_text()
+            extra_vars["vs_memory"]            = self._vs_memory_row.get_text().strip()
         elif game == "factorio":
             extra_vars["factorio_version"]     = self._fac_version_row.get_text().strip()
             extra_vars["factorio_save_name"]   = self._fac_save_row.get_text().strip() or server_name
             extra_vars["factorio_description"] = self._fac_desc_row.get_text().strip()
             extra_vars["factorio_max_players"] = self._fac_max_players_row.get_text().strip()
             extra_vars["factorio_password"]    = self._fac_pass_row.get_text()
+            extra_vars["factorio_memory"]      = self._fac_memory_row.get_text().strip()
 
         version = ""
         if game == "minecraft":

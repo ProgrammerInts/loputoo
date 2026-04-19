@@ -39,4 +39,24 @@
     group: "{{ admin_username }}"
     mode: "0700"
 
+- name: Disable SSH password authentication
+  lineinfile:
+    path: /etc/ssh/sshd_config
+    regexp: '^#?PasswordAuthentication'
+    line: 'PasswordAuthentication no'
+  notify: restart ssh
+
+- name: Check if cloud-init SSH override exists
+  stat:
+    path: /etc/ssh/sshd_config.d/50-cloud-init.conf
+  register: cloud_init_ssh
+
+- name: Disable SSH password authentication in cloud-init override
+  lineinfile:
+    path: /etc/ssh/sshd_config.d/50-cloud-init.conf
+    regexp: '^#?PasswordAuthentication'
+    line: 'PasswordAuthentication no'
+  when: cloud_init_ssh.stat.exists
+  notify: restart ssh
+
 

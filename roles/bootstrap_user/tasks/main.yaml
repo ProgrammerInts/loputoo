@@ -22,3 +22,9 @@
     user: gsdeploy_install
     key: "{{ lookup('file', deployer_ssh_key ~ '.pub') }}"
     state: present
+
+- name: Add SSH public key for initial user
+  authorized_key:
+    user: "{{ initial_user }}"
+    key: "{{ lookup('file', deployer_ssh_key ~ '.pub') }}"
+    state: present

@@ -19,7 +19,11 @@ STEPS = [
     (
         "2. Provision the VM",
         "system-run-symbolic",
-        "Click the provision button on the VM row. This connects to your existing VM, "
+        "Before provisioning, you must SSH into the VM manually at least once from this machine:\n\n"
+        "    ssh <user>@<vm-ip>\n\n"
+        "This adds the VM's fingerprint to your known_hosts file. "
+        "Ansible will refuse to connect if the fingerprint is not already trusted.\n\n"
+        "Once that is done, click the provision button on the VM row. This connects to your existing VM, "
         "creates the admin user, installs Docker and required services, then switches "
         "all future connections to use the admin user and your SSH key.\n\n"
         "Provisioning only needs to be done once per VM.",
@@ -35,8 +39,8 @@ STEPS = [
     (
         "4. Deploy a Game Server",
         "applications-games-symbolic",
-        "Go to Deploy Server and follow the wizard to select a VM, choose a game, "
-        "configure settings, and deploy.\n\n"
+        "Go to Deploy Server and step through the tabs: select a VM, choose a game, "
+        "configure settings, then click Deploy.\n\n"
         "Deployed servers appear on the Dashboard where you can start, stop, "
         "view logs, or remove them.",
     ),
@@ -84,7 +88,10 @@ MODIFICATIONS_STEPS = [
         "• Mods → data/Mods\n"
         "• World → data/Saves\n\n"
         "Valheim\n"
-        "• World → config/worlds_local",
+        "• World → config/worlds_local\n\n"
+        "Factorio\n"
+        "• Saves → data/saves\n"
+        "• Mods → data/mods",
     ),
 ]
 

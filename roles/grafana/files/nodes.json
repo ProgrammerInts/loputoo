@@ -8,9 +8,42 @@
   "time": {"from": "now-30m", "to": "now"},
   "panels": [
     {
+      "type": "stat",
+      "title": "VM Status",
+      "gridPos": {"h": 6, "w": 24, "x": 0, "y": 0},
+      "datasource": {"type": "prometheus", "uid": "prometheus_ds"},
+      "options": {
+        "reduceOptions": {"calcs": ["lastNotNull"]},
+        "orientation": "auto",
+        "textMode": "value_and_name",
+        "colorMode": "background",
+        "text": {"valueSize": 20, "titleSize": 12}
+      },
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "1": {"text": "UP", "color": "green", "index": 0},
+                "0": {"text": "DOWN", "color": "red", "index": 1}
+              }
+            }
+          ],
+          "thresholds": {"mode": "absolute", "steps": [{"color": "red", "value": null}, {"color": "green", "value": 1}]}
+        }
+      },
+      "targets": [
+        {
+          "expr": "up{job=\"node_exporter\"}",
+          "legendFormat": "{{instance}}"
+        }
+      ]
+    },
+    {
       "type": "timeseries",
       "title": "CPU Usage %",
-      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 0},
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 6},
       "datasource": {"type": "prometheus", "uid": "prometheus_ds"},
       "targets": [
         {
@@ -22,7 +55,7 @@
     {
       "type": "timeseries",
       "title": "Memory Usage %",
-      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0},
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 6},
       "datasource": {"type": "prometheus", "uid": "prometheus_ds"},
       "targets": [
         {
@@ -34,19 +67,19 @@
     {
       "type": "timeseries",
       "title": "Disk Usage %",
-      "gridPos": {"h": 8, "w": 24, "x": 0, "y": 8},
+      "gridPos": {"h": 8, "w": 24, "x": 0, "y": 14},
       "datasource": {"type": "prometheus", "uid": "prometheus_ds"},
       "targets": [
         {
           "expr": "100 - ((node_filesystem_avail_bytes{mountpoint=\"/\"} / node_filesystem_size_bytes{mountpoint=\"/\"}) * 100)",
-          "legendFormat": "{{instance}}"
+          "legendFormat": "{{instance}} ({{hostname}})"
         }
       ]
     },
     {
       "type": "timeseries",
       "title": "Network (MB/s)",
-      "gridPos": {"h": 8, "w": 24, "x": 0, "y": 16},
+      "gridPos": {"h": 8, "w": 24, "x": 0, "y": 22},
       "datasource": {"type": "prometheus", "uid": "prometheus_ds"},
       "fieldConfig": {
         "defaults": {

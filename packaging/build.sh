@@ -70,6 +70,13 @@ find "$APP_DIR" -name "*.py" -exec chmod 644 {} \;
 find "$APP_DIR" -name "*.yaml" -exec chmod 644 {} \;
 find "$APP_DIR" -name "*.yml" -exec chmod 644 {} \;
 
+echo "Calculating installed size..."
+INSTALLED_SIZE=$(du -sk "$BUILD_DIR" | cut -f1)
+sed -i "s/^Installed-Size:.*/Installed-Size: $INSTALLED_SIZE/" "$BUILD_DIR/DEBIAN/control"
+if ! grep -q "^Installed-Size:" "$BUILD_DIR/DEBIAN/control"; then
+    echo "Installed-Size: $INSTALLED_SIZE" >> "$BUILD_DIR/DEBIAN/control"
+fi
+
 echo "Building .deb package..."
 dpkg-deb --build "$BUILD_DIR" "$SCRIPT_DIR/gsdeploy_${VERSION}.deb"
 

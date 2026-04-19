@@ -45,14 +45,13 @@
       debug:
         msg: "Provisioning complete! Admin user '{{ admin_username }}' created."
 
-# Play 3: Remove bootstrap user (connect as initial_user to avoid self-deletion)
+# Play 3: Remove bootstrap user (connect as initial_user with SSH key)
 - name: Clean up bootstrap user
   hosts: "{{ target }}"
   become: true
   vars:
     ansible_user: "{{ initial_user }}"
-    ansible_password: "{{ initial_ssh_pass }}"
-    ansible_ssh_private_key_file: ~
+    ansible_ssh_private_key_file: "{{ deployer_ssh_key }}"
     ansible_become_pass: "{{ initial_become_pass }}"
   roles:
     - cleanup

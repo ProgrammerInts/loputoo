@@ -16,6 +16,10 @@ services:
     labels:
       game_type: vintagestory
       server_name: "{{ server_name }}"
+    deploy:
+      resources:
+        limits:
+          memory: "{{ vs_memory | default('4G') }}"
     stop_grace_period: 60s
     logging:
       driver: grafana/loki-docker-driver

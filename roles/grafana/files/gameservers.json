@@ -62,8 +62,8 @@
       },
       "targets": [
         {
-          "expr": "count(container_last_seen{image!=\"\",name!~\".*monitor.*|cadvisor|promtail|grafana|loki|prometheus|blackbox.*\",name!=\"\"}) by (name)",
-          "legendFormat": "{{name}}"
+          "expr": "count(container_last_seen{image!=\"\",name!~\".*monitor.*|cadvisor|promtail|grafana|loki|prometheus|blackbox.*\",name!=\"\"}) by (name, image)",
+          "legendFormat": "{{name}} {{image}}"
         }
       ]
     },
@@ -75,7 +75,7 @@
       "targets": [
         {
           "expr": "rate(container_cpu_usage_seconds_total{image!=\"\",name!~\".*monitor.*|cadvisor|promtail|grafana|loki|prometheus|blackbox.*\",name!=\"\"}[1m]) * 100",
-          "legendFormat": "{{name}}"
+          "legendFormat": "{{name}} {{image}}"
         }
       ]
     },
@@ -87,11 +87,11 @@
       "targets": [
         {
           "expr": "container_memory_usage_bytes{image!=\"\",name!~\".*monitor.*|cadvisor|promtail|grafana|loki|prometheus|blackbox.*\",name!=\"\"} / 1024 / 1024",
-          "legendFormat": "{{name}}"
+          "legendFormat": "{{name}} {{image}}"
         },
         {
           "expr": "container_spec_memory_limit_bytes{image!=\"\",name!~\".*monitor.*|cadvisor|promtail|grafana|loki|prometheus|blackbox.*\",name!=\"\"} / 1024 / 1024 > 0",
-          "legendFormat": "{{name}} (limit)"
+          "legendFormat": "{{name}} {{image}} (limit)"
         }
       ]
     },
@@ -121,7 +121,7 @@
       "targets": [
         {
           "expr": "container_restart_count{image!=\"\",name!~\".*monitor.*|cadvisor|promtail|grafana|loki|prometheus|blackbox.*\",name!=\"\"}",
-          "legendFormat": "{{name}}"
+          "legendFormat": "{{name}} {{image}}"
         }
       ]
     },
@@ -132,12 +132,12 @@
       "datasource": {"type": "prometheus", "uid": "prometheus_ds"},
       "targets": [
         {
-          "expr": "sum by (name) (rate(container_fs_reads_bytes_total{name!~\".*monitor.*|cadvisor|promtail|grafana|loki|prometheus|blackbox.*\",name!=\"\"}[1m])) / 1024 / 1024",
-          "legendFormat": "Read - {{name}}"
+          "expr": "sum by (name, image) (rate(container_fs_reads_bytes_total{name!~\".*monitor.*|cadvisor|promtail|grafana|loki|prometheus|blackbox.*\",name!=\"\"}[1m])) / 1024 / 1024",
+          "legendFormat": "Read - {{name}} {{image}}"
         },
         {
-          "expr": "sum by (name) (rate(container_fs_writes_bytes_total{name!~\".*monitor.*|cadvisor|promtail|grafana|loki|prometheus|blackbox.*\",name!=\"\"}[1m])) / 1024 / 1024",
-          "legendFormat": "Write - {{name}}"
+          "expr": "sum by (name, image) (rate(container_fs_writes_bytes_total{name!~\".*monitor.*|cadvisor|promtail|grafana|loki|prometheus|blackbox.*\",name!=\"\"}[1m])) / 1024 / 1024",
+          "legendFormat": "Write - {{name}} {{image}}"
         }
       ]
     },
@@ -148,12 +148,12 @@
       "datasource": {"type": "prometheus", "uid": "prometheus_ds"},
       "targets": [
         {
-          "expr": "sum by (name) (rate(container_network_receive_bytes_total{name!~\".*monitor.*|cadvisor|promtail|grafana|loki|prometheus|blackbox.*\",name!=\"\"}[1m])) / 1024 / 1024",
-          "legendFormat": "Download - {{name}}"
+          "expr": "sum by (name, image) (rate(container_network_receive_bytes_total{name!~\".*monitor.*|cadvisor|promtail|grafana|loki|prometheus|blackbox.*\",name!=\"\"}[1m])) / 1024 / 1024",
+          "legendFormat": "Download - {{name}} {{image}}"
         },
         {
-          "expr": "sum by (name) (rate(container_network_transmit_bytes_total{name!~\".*monitor.*|cadvisor|promtail|grafana|loki|prometheus|blackbox.*\",name!=\"\"}[1m])) / 1024 / 1024",
-          "legendFormat": "Upload - {{name}}"
+          "expr": "sum by (name, image) (rate(container_network_transmit_bytes_total{name!~\".*monitor.*|cadvisor|promtail|grafana|loki|prometheus|blackbox.*\",name!=\"\"}[1m])) / 1024 / 1024",
+          "legendFormat": "Upload - {{name}} {{image}}"
         }
       ]
     },

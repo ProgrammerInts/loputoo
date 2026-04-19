@@ -13,13 +13,14 @@
     {
       "type": "stat",
       "title": "Server Status",
-      "gridPos": { "h": 4, "w": 24, "x": 0, "y": 0 },
+      "gridPos": { "h": 6, "w": 24, "x": 0, "y": 0 },
       "datasource": { "type": "prometheus", "uid": "prometheus_ds" },
       "options": {
         "reduceOptions": { "calcs": ["lastNotNull"] },
-        "orientation": "horizontal",
+        "orientation": "auto",
         "textMode": "value_and_name",
-        "colorMode": "background"
+        "colorMode": "background",
+        "text": {"valueSize": 20, "titleSize": 12}
       },
       "fieldConfig": {
         "defaults": {
@@ -43,19 +44,19 @@
       },
       "targets": [
         {
-          "expr": "mc_status_query_status",
-          "legendFormat": "{{server}}"
+          "expr": "minecraft_status_healthy",
+          "legendFormat": "{{server_name}} {{instance}} {{server_version}}"
         }
       ]
     },
     {
       "type": "stat",
       "title": "Players Online",
-      "gridPos": { "h": 4, "w": 12, "x": 0, "y": 4 },
+      "gridPos": { "h": 4, "w": 12, "x": 0, "y": 6 },
       "datasource": { "type": "prometheus", "uid": "prometheus_ds" },
       "options": {
         "reduceOptions": { "calcs": ["lastNotNull"] },
-        "orientation": "horizontal",
+        "orientation": "auto",
         "textMode": "value_and_name",
         "colorMode": "value"
       },
@@ -71,19 +72,19 @@
       },
       "targets": [
         {
-          "expr": "mc_status_query_players_online",
-          "legendFormat": "{{server}}"
+          "expr": "minecraft_status_players_online_count",
+          "legendFormat": "{{server_name}} {{instance}}"
         }
       ]
     },
     {
       "type": "stat",
       "title": "Max Players",
-      "gridPos": { "h": 4, "w": 12, "x": 12, "y": 4 },
+      "gridPos": { "h": 4, "w": 12, "x": 12, "y": 6 },
       "datasource": { "type": "prometheus", "uid": "prometheus_ds" },
       "options": {
         "reduceOptions": { "calcs": ["lastNotNull"] },
-        "orientation": "horizontal",
+        "orientation": "auto",
         "textMode": "value_and_name",
         "colorMode": "value"
       },
@@ -99,33 +100,15 @@
       },
       "targets": [
         {
-          "expr": "mc_status_query_players_max",
-          "legendFormat": "{{server}}"
+          "expr": "minecraft_status_players_max_count",
+          "legendFormat": "{{server_name}} {{instance}}"
         }
       ]
     },
     {
       "type": "timeseries",
-      "title": "Players Online Over Time",
-      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 8 },
-      "datasource": { "type": "prometheus", "uid": "prometheus_ds" },
-      "fieldConfig": {
-        "defaults": {
-          "min": 0,
-          "custom": { "fillOpacity": 20 }
-        }
-      },
-      "targets": [
-        {
-          "expr": "mc_status_query_players_online",
-          "legendFormat": "{{server}}"
-        }
-      ]
-    },
-    {
-      "type": "timeseries",
-      "title": "Server Response Time (ms)",
-      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 16 },
+      "title": "Server Response Time (seconds)",
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 18 },
       "datasource": { "type": "prometheus", "uid": "prometheus_ds" },
       "fieldConfig": {
         "defaults": {
@@ -143,8 +126,8 @@
       },
       "targets": [
         {
-          "expr": "mc_status_query_response_time_ms",
-          "legendFormat": "{{server}}"
+          "expr": "minecraft_status_response_time_seconds",
+          "legendFormat": "{{server_name}} {{instance}}"
         }
       ]
     }
