@@ -64,7 +64,7 @@ Your computer               Gameserver VM
 - Python 3.10+
 - SSH access to target VMs
 - ~350 MB disk space (installed)
-- ~100-150 MB RAM at idle, up to ~350 MB during provisioning/deployment (rough estimates)
+- ~50 MB RAM at idle, up to ~150 MB during provisioning/deployment (rough estimates)
 
 > **Note:** Requires libadwaita 1.4+. Ubuntu 22.04/23.04 and Debian 12 ship older versions and are not supported.
 > WSL2 is not recommended — GTK4 GUI support is limited.
@@ -221,6 +221,9 @@ In the **Virtual Machines** tab, add a VM with:
 > Only one Monitoring VM is supported at a time.
 
 ### 2. Provision the VM
+
+***Note**
+Connecting to VM via SSH once before provisioning is **mandatory** since Ansible rejects connecting to untrusted targets.
 
 Click the provision button on the VM row. This connects to your existing VM via
 password-based SSH, creates the admin user, installs Docker, node_exporter, and cAdvisor,
