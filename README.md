@@ -344,20 +344,22 @@ data/config/   — server configuration files
 
 ## Using VMs on a Different Network
 
-> **Design assumption:** GSDeploy is designed for home networks behind NAT, where the local network is trusted and monitoring ports are not reachable from the internet. The provisioning process configures UFW to deny all incoming traffic except SSH, game ports, and monitoring ports — but this only protects the VM itself. If your VM is on a cloud provider (Hetzner, AWS, etc.) without additional firewall rules, monitoring ports with no authentication or TLS could be exposed to the internet. **Always configure your cloud provider's firewall in addition to UFW.**
+> **Design assumption:** GSDeploy is designed for home networks behind NAT, where the local network is trusted and monitoring ports are not reachable from the internet. UFW is configured to deny all incoming traffic by default, but then opens SSH, game ports, and all monitoring ports (3000, 9090, 3100) without IP restrictions — relying on your router's NAT to keep them private. If your VM is on a cloud provider or has a public IP, these ports will be reachable from the internet. **Always configure your cloud provider's firewall in addition to UFW.**
 
 GSDeploy works with any IPv4 address — local, VPN, or public. Enter the VM's reachable IP
 when adding it and SSH access is all that is needed for provisioning and deployment. IPv6 is not currently supported.
 
 **Cloud VPS / public IP (Hetzner, AWS, DigitalOcean, etc.)**
 
-Cloud providers have their own firewall layer **on top of** UFW. GSDeploy configures UFW on the VM, but you must also open the same ports in your cloud provider's firewall (Hetzner Firewall, AWS Security Groups, etc.) — UFW alone is not enough.
+Cloud providers have their own firewall layer **on top of** UFW. GSDeploy configures UFW on the VM, but you must also configure your cloud provider's firewall (Hetzner Firewall, AWS Security Groups, etc.) — UFW alone is not enough.
 
-| Port | Open to | Reason |
+Recommended cloud firewall rules:
+
+| Port | Recommended access | Reason |
 |---|---|---|
 | 22 | Your IP only | SSH for provisioning and deployment |
 | Game port (e.g. 25565) | Everyone | Players connecting to the server |
-| 3000 | Your IP only | Grafana (if you need remote access) |
+| 3000 | Your IP only | Grafana — runs plain HTTP, restrict access |
 | 9090, 3100, 9100, 8080 | Nobody | No authentication — never expose publicly |
 
 > **Note:** If your home IP changes, you will need to update the SSH rule in the cloud firewall before you can provision or deploy again.
