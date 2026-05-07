@@ -12,9 +12,9 @@ STEPS = [
         "You will need:\n"
         "• The VM's IP address — a static IP is strongly recommended, "
         "as a changing IP will break SSH connections and game server reachability\n"
-        "• An existing SSH user on the VM (e.g. ubuntu)\n"
+        "• An existing SSH user and password on the VM (e.g. ubuntu)\n"
         "• A chosen admin username and password that GSDeploy will create\n"
-        "• Your SSH key path (default: ~/.ssh/id_ed25519)",
+        "• Your SSH key path (default: ~/.ssh/id_ed25519) — use the folder button to browse for yours",
     ),
     (
         "2. Provision the VM",
@@ -24,7 +24,7 @@ STEPS = [
         "This adds the VM's fingerprint to your known_hosts file. "
         "Ansible will refuse to connect if the fingerprint is not already trusted.\n\n"
         "Once that is done, click the provision button on the VM row. This connects to your existing VM, "
-        "creates the admin user, installs Docker and required services, then switches "
+        "creates the admin user, installs Docker and supporting services, then switches "
         "all future connections to use the admin user and your SSH key.\n\n"
         "Provisioning only needs to be done once per VM.",
     ),
@@ -33,14 +33,16 @@ STEPS = [
         "utilities-system-monitor-symbolic",
         "If you have a dedicated monitoring VM, click Deploy Monitoring on it. "
         "This installs Prometheus, Grafana, and Loki for metrics and log collection.\n\n"
-        "Monitoring only needs to be deployed once. New game servers register "
-        "themselves automatically when deployed.",
+        "Re-deploy monitoring any time you add a new game server VM — Prometheus targets "
+        "are generated from the current VM list and will not include new VMs until then.",
     ),
     (
         "4. Deploy a Game Server",
         "applications-games-symbolic",
         "Go to Deploy Server and step through the tabs: select a VM, choose a game, "
         "configure settings, then click Deploy.\n\n"
+        "Each game has a memory limit setting — increase it if you plan to run mods "
+        "or expect high player counts.\n\n"
         "Deployed servers appear on the Dashboard where you can start, stop, "
         "view logs, or remove them.",
     ),
@@ -104,7 +106,9 @@ NETWORK_NOTE = (
     "• Forward the game server port on your router to the VM's local IP address\n"
     "• Share your public IP address (or a domain name) with players\n\n"
     "Minecraft default port: 25565 (TCP)\n"
-    "Valheim default ports: 2456–2457 (UDP)\n\n"
+    "Valheim default ports: 2456–2457 (UDP)\n"
+    "Vintage Story default port: 42420 (TCP)\n"
+    "Factorio default port: 34197 (UDP)\n\n"
     "If you use a VPN (e.g. Tailscale, WireGuard), port forwarding is not needed — "
     "players connect through the VPN address instead.",
 )

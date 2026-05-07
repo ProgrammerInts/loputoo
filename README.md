@@ -12,7 +12,7 @@ GSDeploy is a desktop application for deploying and monitoring game servers on r
 
 It provides a simple GUI for managing infrastructure and deploying game servers without manual configuration.
 
-### How it works
+## How it works
 
 GSDeploy runs on **your computer** and connects to a remote VM over SSH. It configures the VM, deploys game servers as Docker containers, and sets up a monitoring stack — all without manual server configuration.
 
@@ -62,15 +62,26 @@ Your computer               Gameserver VM
 - Ubuntu 24.04 LTS or newer
 - Linux Mint 22 or newer
 - Python 3.10+
-- SSH access to target VMs
+- SSH key pair (required — used to authenticate with target VMs)
 - ~350 MB disk space (installed)
 - ~50 MB RAM at idle, up to ~150 MB during provisioning/deployment (rough estimates)
 
 > **Note:** Requires libadwaita 1.4+. Ubuntu 22.04/23.04 and Debian 12 ship older versions and are not supported.
 > WSL2 is not recommended — GTK4 GUI support is limited.
 
+**SSH key setup**
+
+GSDeploy uses SSH key authentication to connect to your VMs. If you don't have a key yet:
+
+```bash
+ssh-keygen -t ed25519
+```
+
+This creates a key pair at `~/.ssh/id_ed25519` (private) and `~/.ssh/id_ed25519.pub` (public).
+The public key is automatically copied to the VM during provisioning.
+
 > **Security recommendation:** Use a passphrase-protected SSH key to prevent unauthorized VM access
-> if your computer is compromised (use this if you wish to change passphrase of current key):
+> if your computer is compromised. To change the passphrase on an existing key:
 > ```bash
 > ssh-keygen -p -f ~/.ssh/id_ed25519
 > ```
@@ -90,6 +101,8 @@ Your computer               Gameserver VM
 
 > **Local VM networking:** When using VMware or VirtualBox, set the VM network adapter to **Bridged** mode. This gives the VM its own IP on your local network, making it directly reachable from GSDeploy without any port forwarding. Network adapter's NAT mode requires additional port forwarding configuration and is not recommended.
 
+> **Important:** A clean OS installation is strongly recommended. Pre-existing software such as Docker, web servers, or custom package repositories can conflict with the provisioning process and cause failures. If you must use an existing machine, be aware that conflicts may require manual intervention to resolve.
+
 ### Per-Game Requirements
 
 | Game | Min RAM | Min Disk |
@@ -102,40 +115,11 @@ Your computer               Gameserver VM
 
 ---
 
-## Using VMs on a Different Network
-
-> **Design assumption:** GSDeploy is designed for home networks behind NAT, where the local network is trusted and monitoring ports are not reachable from the internet. The provisioning process configures UFW to deny all incoming traffic except SSH, game ports, and monitoring ports — but this only protects the VM itself. If your VM is on a cloud provider (Hetzner, AWS, etc.) without additional firewall rules, monitoring ports with no authentication or TLS could be exposed to the internet. **Always configure your cloud provider's firewall in addition to UFW.**
-
-GSDeploy works with any IPv4 address — local, VPN, or public. Enter the VM's reachable IP
-when adding it and SSH access is all that is needed for provisioning and deployment. IPv6 is not currently supported.
-
-**Cloud VPS / public IP (Hetzner, AWS, DigitalOcean, etc.)**
-
-Cloud providers have their own firewall layer **on top of** UFW. GSDeploy configures UFW on the VM, but you must also open the same ports in your cloud provider's firewall (Hetzner Firewall, AWS Security Groups, etc.) — UFW alone is not enough.
-
-| Port | Open to | Reason |
-|---|---|---|
-| 22 | Your IP only | SSH for provisioning and deployment |
-| Game port (e.g. 25565) | Everyone | Players connecting to the server |
-| 3000 | Your IP only | Grafana (if you need remote access) |
-| 9090, 3100, 9100, 8080 | Nobody | No authentication — never expose publicly |
-
-> **Note:** If your home IP changes, you will need to update the SSH rule in the cloud firewall before you can provision or deploy again.
-
-> **Grafana over public internet:** Grafana runs plain HTTP with no TLS — credentials travel unencrypted. Restrict it to your IP only, or put a reverse proxy (e.g. nginx + Let's Encrypt) in front of it if broader access is needed.
-
-**VMs behind NAT (different LAN / home router)**
-- Forward port 22 on the router to the VM for SSH access during provisioning/deployment
-- Forward the game port(s) for players to connect
-
-**VPN (e.g. Tailscale, WireGuard)**
-- Assign VMs a VPN IP and use that — no port forwarding needed, monitoring ports stay private
-
----
-
 ## Installation
 
 ### Option A — Install from .deb package (recommended)
+
+#### 1. Download package and install
 
 Download the latest `.deb` from [GitHub Releases](../../releases/latest), then:
 
@@ -143,9 +127,19 @@ Download the latest `.deb` from [GitHub Releases](../../releases/latest), then:
 sudo apt install ./gsdeploy_X.X.X.deb
 ```
 
+#### 2. Set up SSH key (if you don't have one)
+
+```bash
+ssh-keygen -t ed25519
+```
+
+This creates a key pair at `~/.ssh/id_ed25519` (private) and `~/.ssh/id_ed25519.pub` (public).
+The public key is automatically copied to the VM during provisioning — you don't need to do anything manually.
+
+#### 3. Launch the application
+
 Launch from your application menu or run `gsdeploy` in a terminal.
 
-> Make sure you have an SSH key set up before using GSDeploy — see step 3 in Option B below.
 
 ### Option B — Run from source
 
@@ -222,8 +216,7 @@ In the **Virtual Machines** tab, add a VM with:
 
 ### 2. Provision the VM
 
-***Note**
-Connecting to VM via SSH once before provisioning is **mandatory** since Ansible rejects connecting to untrusted targets.
+> **Note:** Connecting to the VM via SSH once before provisioning is **mandatory** — Ansible rejects connecting to untrusted hosts.
 
 Click the provision button on the VM row. This connects to your existing VM via
 password-based SSH, creates the admin user, installs Docker, node_exporter, and cAdvisor,
@@ -237,7 +230,7 @@ then switches all future connections to use the admin user and your SSH key.
 ### 3. Deploy Monitoring (optional)
 
 Click **Deploy Monitoring** on the monitoring VM row. This deploys Prometheus, Loki, and Grafana.
-Re-run it any time you change monitoring configuration.
+Re-run it any time you change monitoring configuration or add a new game server VM — Prometheus targets are generated from the current VM list and will not include new VMs until monitoring is redeployed.
 
 If a monitoring VM is configured before provisioning, promtail is automatically set up on game
 server VMs to ship logs to Loki.
@@ -266,7 +259,7 @@ to a game server VM using rsync over SSH.
 
 ---
 
-## Game Configuration
+## Games
 
 ### Minecraft
 
@@ -282,12 +275,26 @@ to a game server VM using rsync over SSH.
 > For modded servers (Forge, Fabric): place mods in the **Modifications** tab after deployment,
 > then restart the server from the Dashboard.
 
+Server data stored at `/opt/gameservers/<server-name>/`:
+```
+data/          — server root
+data/mods/     — mod files (Forge, Fabric)
+data/plugins/  — plugin files (Paper, Spigot)
+data/world/    — world save files
+```
+
 ### Valheim
 
 | Field | Default | Description |
 |---|---|---|
 | World Name | `Dedicated` | World save name |
 | Server Password | `changeme` | Minimum 5 characters, cannot match world name |
+
+Server data stored at `/opt/gameservers/<server-name>/`:
+```
+config/    — server configuration
+data/      — world saves (created by container on first start)
+```
 
 ### Vintage Story
 
@@ -297,6 +304,12 @@ to a game server VM using rsync over SSH.
 | Game Port | `42420` | Port players connect to |
 | Max Players | `16` | Maximum concurrent players |
 
+Server data stored at `/opt/gameservers/<server-name>/`:
+```
+data/          — world saves and server data
+data/config/   — server configuration files
+```
+
 ### Factorio
 
 | Field | Default | Description |
@@ -305,33 +318,7 @@ to a game server VM using rsync over SSH.
 | Game Port | `34197` | UDP port players connect to |
 | Max Players | `0` | Maximum concurrent players (0 = unlimited) |
 
----
-
-## Game Server Data
-
-Stored on the VM at `/opt/gameservers/<server-name>/`:
-
-**Minecraft**
-```
-data/          — server root
-data/mods/     — mod files (Forge, Fabric)
-data/plugins/  — plugin files (Paper, Spigot)
-data/world/    — world save files
-```
-
-**Valheim**
-```
-config/    — server configuration
-data/      — world saves (created by container on first start)
-```
-
-**Vintage Story**
-```
-data/          — world saves and server data
-data/config/   — server configuration files
-```
-
-**Factorio**
+Server data stored at `/opt/gameservers/<server-name>/`:
 ```
 data/          — saves and server data
 data/config/   — server configuration files
@@ -352,6 +339,37 @@ data/config/   — server configuration files
 | mc-monitor | Minecraft server metrics | game port + 1000 |
 
 > **Security warning:** Prometheus, Loki, and the exporter ports have no authentication and Grafana runs plain HTTP. See [Using VMs on a Different Network](#using-vms-on-a-different-network) for firewall recommendations.
+
+---
+
+## Using VMs on a Different Network
+
+> **Design assumption:** GSDeploy is designed for home networks behind NAT, where the local network is trusted and monitoring ports are not reachable from the internet. The provisioning process configures UFW to deny all incoming traffic except SSH, game ports, and monitoring ports — but this only protects the VM itself. If your VM is on a cloud provider (Hetzner, AWS, etc.) without additional firewall rules, monitoring ports with no authentication or TLS could be exposed to the internet. **Always configure your cloud provider's firewall in addition to UFW.**
+
+GSDeploy works with any IPv4 address — local, VPN, or public. Enter the VM's reachable IP
+when adding it and SSH access is all that is needed for provisioning and deployment. IPv6 is not currently supported.
+
+**Cloud VPS / public IP (Hetzner, AWS, DigitalOcean, etc.)**
+
+Cloud providers have their own firewall layer **on top of** UFW. GSDeploy configures UFW on the VM, but you must also open the same ports in your cloud provider's firewall (Hetzner Firewall, AWS Security Groups, etc.) — UFW alone is not enough.
+
+| Port | Open to | Reason |
+|---|---|---|
+| 22 | Your IP only | SSH for provisioning and deployment |
+| Game port (e.g. 25565) | Everyone | Players connecting to the server |
+| 3000 | Your IP only | Grafana (if you need remote access) |
+| 9090, 3100, 9100, 8080 | Nobody | No authentication — never expose publicly |
+
+> **Note:** If your home IP changes, you will need to update the SSH rule in the cloud firewall before you can provision or deploy again.
+
+> **Grafana over public internet:** Grafana runs plain HTTP with no TLS — credentials travel unencrypted. Restrict it to your IP only, or put a reverse proxy (e.g. nginx + Let's Encrypt) in front of it if broader access is needed.
+
+**VMs behind NAT (different LAN / home router)**
+- Forward port 22 on the router to the VM for SSH access during provisioning/deployment
+- Forward the game port(s) for players to connect
+
+**VPN (e.g. Tailscale, WireGuard)**
+- Assign VMs a VPN IP and use that — no port forwarding needed, monitoring ports stay private
 
 ---
 
