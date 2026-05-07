@@ -80,6 +80,7 @@ MODIFICATIONS_STEPS = [
         "Destination folders by game",
         "preferences-system-symbolic",
         "Each game type maps to different server directories:\n\n"
+        "Game server data path: /opt/gameservers/<gameservername>/\n\n"
         "Minecraft\n"
         "• Mods → data/mods (Forge, Fabric, NeoForge, Quilt)\n"
         "• Plugins → data/plugins (Paper, Spigot)\n"
@@ -109,17 +110,15 @@ NETWORK_NOTE = (
 )
 
 
-class GuidePage(Gtk.ScrolledWindow):
+class GuidePage(Gtk.Box):
     def __init__(self):
-        super().__init__()
-        self.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
+        super().__init__(orientation=Gtk.Orientation.VERTICAL, spacing=16)
+        self.set_margin_top(24)
+        self.set_margin_bottom(24)
+        self.set_margin_start(24)
+        self.set_margin_end(24)
 
-        content = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=16)
-        content.set_margin_top(24)
-        content.set_margin_bottom(24)
-        content.set_margin_start(24)
-        content.set_margin_end(24)
-        self.set_child(content)
+        content = self
 
         # Intro
         intro = Gtk.Label(

@@ -3,10 +3,26 @@ import re
 import gi
 gi.require_version("Gtk", "4.0")
 gi.require_version("Adw", "1")
-from gi.repository import Adw, Gtk
+from gi.repository import Adw, Gtk, Gio
 
 import gsdeploy.database as db
 import gsdeploy.ansible_runner as runner
+
+
+def _pick_ssh_key(parent, entry_row):
+    dialog = Gtk.FileDialog()
+    dialog.set_title("Select SSH Private Key")
+    ssh_dir = os.path.expanduser("~/.ssh")
+    if os.path.isdir(ssh_dir):
+        dialog.set_initial_folder(Gio.File.new_for_path(ssh_dir))
+    def _on_done(d, result):
+        try:
+            f = d.open_finish(result)
+            path = f.get_path()
+            entry_row.set_text(path)
+        except Exception:
+            pass
+    dialog.open(parent, None, _on_done)
 
 
 def _validate_vm_fields(name, ip, user, admin_user, key):
@@ -178,14 +194,14 @@ class VMManagerPage(Gtk.Box):
             on_proceed()
 
     def _on_deploy_monitoring(self, _btn, vm):
-        dialog = Adw.Dialog(title="Deploy Monitoring")
-        dialog.set_content_width(420)
-
-        toolbar_view = Adw.ToolbarView()
-        header_bar = Adw.HeaderBar()
-        toolbar_view.add_top_bar(header_bar)
+        dialog = Gtk.Window(title="Deploy Monitoring")
+        dialog.set_transient_for(self.get_root())
+        dialog.set_modal(False)
+        dialog.set_resizable(True)
+        dialog.set_default_size(480, -1)
 
         content = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
+        content.set_vexpand(True)
 
         group = Adw.PreferencesGroup()
         group.set_margin_top(16)
@@ -197,10 +213,12 @@ class VMManagerPage(Gtk.Box):
         self._mon_log_view = Gtk.TextView(buffer=self._mon_log_buffer)
         self._mon_log_view.set_editable(False)
         self._mon_log_view.set_monospace(True)
+        self._mon_log_view.set_vexpand(True)
         self._mon_log_view.set_wrap_mode(Gtk.WrapMode.WORD_CHAR)
 
         scroll = Gtk.ScrolledWindow()
         scroll.set_min_content_height(200)
+        scroll.set_vexpand(True)
         scroll.set_child(self._mon_log_view)
         scroll.set_margin_start(16)
         scroll.set_margin_end(16)
@@ -227,18 +245,24 @@ class VMManagerPage(Gtk.Box):
 
         deploy_btn.connect("clicked", self._run_monitoring_deploy, vm, dialog, deploy_btn, interrupt_btn)
         interrupt_btn.connect("clicked", self._interrupt_monitoring, interrupt_btn, deploy_btn)
+        dialog.set_default_widget(deploy_btn)
+
+        self._mon_status_label = Gtk.Label(label="")
+        self._mon_status_label.set_margin_bottom(8)
+        self._mon_status_label.set_visible(False)
 
         btn_box.append(mon_spinner)
         btn_box.append(deploy_btn)
         btn_box.append(interrupt_btn)
 
         content.append(scroll)
+        content.append(self._mon_status_label)
         content.append(btn_box)
-        toolbar_view.set_content(content)
-        dialog.set_child(toolbar_view)
-        dialog.present(self)
+        dialog.set_child(content)
+        dialog.present()
 
     def _run_monitoring_deploy(self, _btn, vm, dialog, deploy_btn, interrupt_btn):
+        self._mon_status_label.set_visible(False)
         self._mon_scroll.set_visible(True)
         deploy_btn.set_sensitive(False)
         interrupt_btn.set_visible(True)
@@ -251,8 +275,14 @@ class VMManagerPage(Gtk.Box):
             deploy_btn.set_sensitive(True)
             interrupt_btn.set_visible(False)
             self._mon_cancel = None
+            self._mon_status_label.set_visible(True)
             if ok:
+                self._mon_status_label.set_label("✓ Monitoring deployed successfully")
+                self._mon_status_label.set_css_classes(["success"])
                 db.set_setting("monitoring_deployed", "1")
+            else:
+                self._mon_status_label.set_label("✗ Deployment failed — check the log above")
+                self._mon_status_label.set_css_classes(["error"])
 
         self._mon_cancel = runner.run_deploy_monitoring(
             vm_name=vm["hostname"],
@@ -302,11 +332,11 @@ class VMManagerPage(Gtk.Box):
             self._refresh()
 
     def _show_add_dialog(self, _btn):
-        dialog = Adw.Dialog(title="Add Virtual Machine")
-        dialog.set_content_width(420)
-
-        toolbar_view = Adw.ToolbarView()
-        toolbar_view.add_top_bar(Adw.HeaderBar())
+        dialog = Gtk.Window(title="Add Virtual Machine")
+        dialog.set_transient_for(self.get_root())
+        dialog.set_modal(False)
+        dialog.set_resizable(True)
+        dialog.set_default_size(420, -1)
 
         content = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
 
@@ -321,11 +351,15 @@ class VMManagerPage(Gtk.Box):
         self._user_row        = Adw.EntryRow(title="Initial SSH User")
         self._admin_user_row  = Adw.EntryRow(title="Admin Username")
         self._admin_user_row.set_text("admin")
-        self._admin_pass_row  = Adw.PasswordEntryRow(title="Admin Password")
+        self._admin_pass_row  = Adw.PasswordEntryRow(title="Admin Password (Reccom. 8+ characters)")
         self._admin_pass_row.set_show_apply_button(False)
-        self._admin_pass_row.get_delegate().set_placeholder_text("Recommended: 8+ characters")
+#        self._admin_pass_row.get_delegate().set_placeholder_text("Recommended: 8+ characters")
         self._key_row         = Adw.EntryRow(title="SSH Key Path")
         self._key_row.set_text("~/.ssh/id_ed25519")
+        key_btn = Gtk.Button(icon_name="document-open-symbolic", valign=Gtk.Align.CENTER)
+        key_btn.set_css_classes(["flat"])
+        key_btn.connect("clicked", lambda _: _pick_ssh_key(self.get_root(), self._key_row))
+        self._key_row.add_suffix(key_btn)
 
         # VM type selector
         self._type_row = Adw.ComboRow(title="VM Type")
@@ -357,9 +391,8 @@ class VMManagerPage(Gtk.Box):
         content.append(group)
         content.append(self._error_label)
         content.append(add_btn)
-        toolbar_view.set_content(content)
-        dialog.set_child(toolbar_view)
-        dialog.present(self)
+        dialog.set_child(content)
+        dialog.present()
 
     def _on_add_confirmed(self, _btn, dialog):
         name       = self._name_row.get_text().strip()
@@ -405,13 +438,19 @@ class VMManagerPage(Gtk.Box):
         self._refresh()
 
     def _show_provision_dialog(self, _btn, vm):
-        dialog = Adw.Dialog(title=f"Provision {vm['name']}")
-        dialog.set_content_width(420)
+        dialog = Gtk.Window(title=f"Provision {vm['name']}")
+        dialog.set_transient_for(self.get_root())
+        dialog.set_modal(False)
+        dialog.set_resizable(True)
+        dialog.set_default_size(480, -1)
 
+        header = Adw.HeaderBar()
+        header.set_show_end_title_buttons(False)
         toolbar_view = Adw.ToolbarView()
-        toolbar_view.add_top_bar(Adw.HeaderBar())
+        toolbar_view.add_top_bar(header)
 
         content = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
+        content.set_vexpand(True)
 
         group = Adw.PreferencesGroup()
         group.set_margin_top(16)
@@ -419,17 +458,19 @@ class VMManagerPage(Gtk.Box):
         group.set_margin_start(16)
         group.set_margin_end(16)
 
-        self._prov_become_row = Adw.PasswordEntryRow(title=f"Password for {vm['initial_user']}")
+        self._prov_become_row = Adw.PasswordEntryRow(title=f"SSH password for {vm['initial_user']}")
         group.add(self._prov_become_row)
 
         self._prov_log_buffer = Gtk.TextBuffer()
         self._prov_log_view = Gtk.TextView(buffer=self._prov_log_buffer)
         self._prov_log_view.set_editable(False)
         self._prov_log_view.set_monospace(True)
+        self._prov_log_view.set_vexpand(True)
         self._prov_log_view.set_wrap_mode(Gtk.WrapMode.WORD_CHAR)
 
         scroll = Gtk.ScrolledWindow()
         scroll.set_min_content_height(200)
+        scroll.set_vexpand(True)
         scroll.set_child(self._prov_log_view)
         scroll.set_margin_start(16)
         scroll.set_margin_end(16)
@@ -456,6 +497,12 @@ class VMManagerPage(Gtk.Box):
 
         provision_btn.connect("clicked", self._run_provision, vm, dialog, provision_btn, interrupt_btn)
         interrupt_btn.connect("clicked", self._interrupt_provision, interrupt_btn, provision_btn)
+        self._prov_become_row.connect("entry-activated", lambda _: provision_btn.emit("clicked"))
+        dialog.set_default_widget(provision_btn)
+
+        self._prov_status_label = Gtk.Label(label="")
+        self._prov_status_label.set_margin_bottom(8)
+        self._prov_status_label.set_visible(False)
 
         btn_box.append(spinner)
         btn_box.append(provision_btn)
@@ -463,13 +510,14 @@ class VMManagerPage(Gtk.Box):
 
         content.append(group)
         content.append(scroll)
+        content.append(self._prov_status_label)
         content.append(btn_box)
-        toolbar_view.set_content(content)
-        dialog.set_child(toolbar_view)
-        dialog.present(self)
+        dialog.set_child(content)
+        dialog.present()
 
     def _run_provision(self, _btn, vm, dialog, provision_btn, interrupt_btn):
         become_pass = self._prov_become_row.get_text()
+        self._prov_status_label.set_visible(False)
         self._prov_scroll.set_visible(True)
         provision_btn.set_sensitive(False)
         interrupt_btn.set_visible(True)
@@ -482,12 +530,18 @@ class VMManagerPage(Gtk.Box):
             provision_btn.set_sensitive(True)
             interrupt_btn.set_visible(False)
             self._prov_cancel = None
+            self._prov_status_label.set_visible(True)
             if success:
+                self._prov_status_label.set_label("✓ Provisioning completed successfully")
+                self._prov_status_label.set_css_classes(["success"])
                 db.set_vm_ssh_user(vm["id"], vm["admin_username"])
                 runner.add_to_inventory(
                     vm["hostname"], vm["ip"], vm["admin_username"], vm["ssh_key"], vm["vm_type"]
                 )
                 self._refresh()
+            else:
+                self._prov_status_label.set_label("✗ Provisioning failed — check the log above")
+                self._prov_status_label.set_css_classes(["error"])
 
         self._prov_cancel = runner.run_provision_vm(
             hostname=vm["hostname"],
@@ -520,11 +574,11 @@ class VMManagerPage(Gtk.Box):
             self._prov_log_view.scroll_to_iter(end, 0, False, 0, 0)
 
     def _show_edit_dialog(self, _btn, vm):
-        dialog = Adw.Dialog(title="Edit Virtual Machine")
-        dialog.set_content_width(420)
-
-        toolbar_view = Adw.ToolbarView()
-        toolbar_view.add_top_bar(Adw.HeaderBar())
+        dialog = Gtk.Window(title="Edit Virtual Machine")
+        dialog.set_transient_for(self.get_root())
+        dialog.set_modal(False)
+        dialog.set_resizable(True)
+        dialog.set_default_size(420, -1)
 
         content = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
 
@@ -547,6 +601,10 @@ class VMManagerPage(Gtk.Box):
         self._edit_admin_pass_row.set_text(vm["admin_password"])
         self._edit_key_row        = Adw.EntryRow(title="SSH Key Path")
         self._edit_key_row.set_text(vm["ssh_key"])
+        edit_key_btn = Gtk.Button(icon_name="document-open-symbolic", valign=Gtk.Align.CENTER)
+        edit_key_btn.set_css_classes(["flat"])
+        edit_key_btn.connect("clicked", lambda _: _pick_ssh_key(self.get_root(), self._edit_key_row))
+        self._edit_key_row.add_suffix(edit_key_btn)
 
         self._edit_type_row = Adw.ComboRow(title="VM Type")
         type_model = Gtk.StringList.new(["Game Server", "Monitoring"])
@@ -577,9 +635,8 @@ class VMManagerPage(Gtk.Box):
         content.append(group)
         content.append(self._edit_error_label)
         content.append(save_btn)
-        toolbar_view.set_content(content)
-        dialog.set_child(toolbar_view)
-        dialog.present(self)
+        dialog.set_child(content)
+        dialog.present()
 
     def _on_edit_confirmed(self, _btn, old_vm, dialog):
         name       = self._edit_name_row.get_text().strip()
